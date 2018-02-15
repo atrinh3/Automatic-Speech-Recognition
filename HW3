@@ -1,0 +1,105 @@
+# load libraries
+import sounddevice as sd
+import scipy.io.wavfile
+import numpy as np
+import matplotlib.pyplot as plt
+
+# record 4 seconds of audio
+duration = 4 # 4 seconds
+def make_recording(time)
+	CHANNELS = 1 # one channel, so mono not stereo
+	fs = 16000 # 16kHz sample rate
+	s = sd.rec(int(duration * fs), 
+			   samplerate=fs,
+			   channels=CHANNELS)
+	sd.wait()
+	tmp = sd.playrec(s, fs, channels=CHANNELS)
+
+# Now produce a spectrogram.
+# First, set the window size, which is the number of samples
+# to process at a time over which each vertical column of the
+# spectrum corresponds to. The python specgram calls this NFFT for
+# some reason, but we’re going to name a parameter window_size, and this
+# is going to be in units of milliseconds, and we’ll convert it
+# to the corresponding ’nfft’ value.
+window_size = 25
+nfft = int(float(fs)*float(window_size)/1000.0)
+
+# Next, set the number of points that we compute the FFT, and do this using
+# the pad_to parameter. I.e., we’ve got a window of size window_size,
+# and that corresponds to nfft speech samples. We want to round this
+# up to next power of two to ensure that we use power of 2 FFTs. The
+# ’next_power’ parameter determines which next power of two we round up to,
+# next_power=1 means the 1st next power, next_power=2 means the next next power,
+# and so on.
+next_power = 1
+my_pad = int(np.power(2,(next_power-1)+ np.ceil(np.log2(nfft))))
+
+# Note that my_pad is a power of 2, and this is what the final FFT length
+# python will use.
+
+# Next, we set how many points of the speech windows overlap between successive
+# windows. We’re going to say that 7/8’ths of the points overlap (so stepping
+# by 1/8th of a window at each column of the spectrogram. Note that
+# how many points this is depends on the window size.
+my_noverlap = int(float(nfft)*7.0/8.0)
+
+# Lastly, we’re going to select a color map. ’jet’ has commonly been used
+# in matlab, but there is some concern about using ’jet’ as a color map as
+# the color intensity (or luminosity) is dark for both low and high magnitude
+# values (so it doesn’t plot well when plotted in B&W). Hence, we’re going
+# to use the colormap called ’cubehelix’, although if you change this to
+# use ’jet’, you’ll see results that probably look more familiar since ’jet’
+# is so widely used when plotting in color.
+my_cmap = plt.get_cmap(’cubehelix’)
+
+# Lastly, plot the spectrogram.
+fig, ax = plt.subplots()
+ax.set_title(’A spectrogram’)
+ax.set_xlabel(’time (seconds)’)
+ax.set_ylabel(’frequency’)
+Pxx, freqs, bins, im = plt.specgram(s[:,0], NFFT=nfft, Fs=fs, pad_to=my_pad,
+noverlap=my_noverlap,cmap=my_cmap);
+fig.colorbar(im).set_label(’Intensity (dB)’);
+plt.show()
+
+
+
+# Prob 1a
+# try window sizes 50, 10, 25, 50, 100
+# for each window size, use increasing power of 2 for FFT size
+# should have 20 spectrograms at the end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
