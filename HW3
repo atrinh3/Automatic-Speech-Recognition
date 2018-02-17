@@ -5,7 +5,6 @@ import sounddevice as sd
 
 
 def make_recording(freq, time, name):
-    CHANNELS = 1  # one channel, so mono not stereo
     print("Recording...")
     s = sd.rec(int(time * fs),
                blocking=True,
@@ -23,19 +22,9 @@ def save_wav(filename, recording, fs):
     wv.write(filename, fs, recording)
 
 
-def make_spectrogram(s, window, fft, npower, fs, row, id):
+def make_spectrogram(s, nfft, npower, fs, row, id, fig, ax):
     # Now produce a spectrogram.
-    # First, set the window size, which is the number of samples
-    # to process at a time over which each vertical column of the
-    # spectrum corresponds to. The python specgram calls this NFFT for
-    # some reason, but we’re going to name a parameter window_size, and this
-    # is going to be in units of milliseconds, and we’ll convert it
-    # to the corresponding ’nfft’ value.
-    window_size = window
-    next_power = npower
-    nfft = fft
-
-    my_pad = int(np.power(2, (next_power - 1) + np.ceil(np.log2(nfft))))
+    my_pad = int(np.power(2, (npower - 1) + np.ceil(np.log2(nfft))))
 
     # Note that my_pad is a power of 2, and this is what the final FFT length
     # python will use.
@@ -56,29 +45,21 @@ def make_spectrogram(s, window, fft, npower, fs, row, id):
     my_cmap = plt.get_cmap('cubehelix')
 
     # Lastly, plot the spectrogram.
-    fig, ax = plt.subplots(row, next_power)
-    ax.set_title('A spectrogram')
-    ax.set_xlabel('time(seconds)')
-    ax.set_ylabel('frequency')
-    Pxx, freqs, bins, im = plt.specgram(
-        # s[:, 0],
-        s,
+    axes = ax[row-1, npower-1]
+    axes.specgram(
+        s[1],
         NFFT=nfft,
         Fs=fs,
         pad_to=my_pad,
         noverlap=my_noverlap,
         cmap=my_cmap)
-    fig.colorbar(im).set_label('Intensity(dB)')
-    plt.show()
 
 
-def prob_1_a(w, name, fs, row):
-    window = w
-
-    # next_power = npower
+def prob_1_a(w, data, fs, row, figure, ax):
     fft = int(float(fs) * float(w) / 1000.0)
     for i in range(1, 5):
-        make_spectrogram(name, w, fft, i, fs, row, (row - 1) * 4 + i)
+        id = (row - 1) * 4 + i
+        make_spectrogram(data, fft, i, fs, row, id, figure, ax)
 
 
 # =============#
@@ -89,14 +70,30 @@ duration = 4  # 4 seconds
 filename = "prob1a.wav"
 sd.default.samplerate = fs
 sd.default.channels = 1
+row = 5
+col = 4
 
 # make_recording(fs, duration, filename)
 signal = wv.read(filename)
-prob_1_a(5, signal, fs, 1)
-prob_1_a(10, signal, fs, 2)
-prob_1_a(25, signal, fs, 3)
-prob_1_a(50, signal, fs, 4)
-prob_1_a(100, signal, fs, 5)
+
+# print(type(signal))
+# print(type(signal[1]))
+
+fig, ax = plt.subplots(row, col)
+# print(ax.shape[0]) # 5
+# print(ax.shape[1]) # 4
+
+# for i in range(1, ax.shape[0]+1):
+#     prob_1_a(5, signal, fs, i, fig, ax)
+prob_1_a(5, signal, fs, 1, fig, ax)
+prob_1_a(10, signal, fs, 2, fig, ax)
+prob_1_a(25, signal, fs, 3, fig, ax)
+prob_1_a(50, signal, fs, 4, fig, ax)
+prob_1_a(100, signal, fs, 5, fig, ax)
+fig.suptitle('Spectrogram Grid')
+fig.xlabel('"Next Power" parameter')
+fig.ylabel('Increasing window sizes')
+plt.show()
 
 # Prob 1a
 # try window sizes 5, 10, 25, 50, 100 (ms)
