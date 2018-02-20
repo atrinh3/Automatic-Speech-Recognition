@@ -1,0 +1,194 @@
+import matplotlib.pyplot as plt
+import scipy.io.wavfile as wv
+import sounddevice as sd
+import numpy as np
+import math
+
+
+def make_recording(freq, t, name):
+    print("Recording...")
+    s = sd.rec(int(t * freq),
+               blocking=True,
+               dtype='int16')
+    print("Stopped recording.")
+    print("Playing back recording...")
+    sd.play(s, blocking=True)
+    print("Playback finished.")
+    # save as .wav file
+    save_wav(name, s, freq)
+
+
+def save_wav(filename, recording, fs):
+    print("Recording saved as \"" + filename + "\".")
+    wv.write(filename, fs, recording)
+
+
+# The "make_window" function takes a window width parameter and returns
+# an array representing the Hamming window
+def make_window(w, freq):
+    sample_size = int(freq*w / 1000)
+    ham = []
+    for n in range(0, sample_size):
+        ham.append(0.54 - 0.46 * math.cos(2 * math.pi * n / sample_size))
+    plt.plot(ham)
+    plt.show()
+    return ham
+
+
+def get_vector(array):
+    # The following works for only 1 frame
+    plt.plot(array)
+    plt.title('Windowed signal')
+    plt.show()
+
+    # compute FFT
+    out = np.fft.fft(array)
+    plt.plot(out)
+    plt.title('FFT of signal')
+    plt.show()
+
+    # take abs value
+    out = abs(out)
+
+    plt.plot(out)
+    plt.title('|FFT of signal|')
+    plt.show()
+
+    # take log
+    for i in range(0, len(array)):
+        out[i] = math.log10(out[i])
+    plt.plot(out)
+    plt.title('log|FFT of signal|')
+    plt.show()
+
+    # inverse dtft
+    out = np.fft.ifft(out)
+
+    plt.plot(out)
+    plt.title('IFFT of log|FFT of signal|')
+    plt.show()
+
+    # test = test[0:100]
+    # plt.plot(test)
+    # plt.title('Truncated IFFT of log|FFT of signal|')
+    # plt.show()
+
+    out = np.fft.fft(out)
+    # plt.plot(test[0:50])
+    plt.plot(out)
+    plt.title('FFT of lifted IFFT of log|FFT of signal|')
+    plt.show()
+
+    out = np.fft
+
+    return out
+
+def produce_mfcc(signal, window, fs, fr, max):
+    # have a window function
+    # want to apply window to signal
+    # perform cepstrum operations to windowed signal
+    # repeat with window shifted
+
+    window_length = len(window)
+    signal_length = len(signal)
+    shift = 1/fr * fs
+
+    coeff = []
+    i = 0
+    count = 0
+    while i + window_length <= signal_length:
+        # Get truncated sample and multiply with window function
+        start = int(i)
+        end = int(i + window_length)
+        tmp = signal[start:end]
+        tmp = np.multiply(tmp, window)
+        if count == 280:
+            plt.plot(tmp)
+            plt.show()
+            get_vector(tmp)
+        # coeff.append(get_vector(tmp))
+        i += shift
+        count += 1
+
+
+
+# =============#
+#     START    #
+# -------------#
+# Problem 3(a).
+# Reading over MFCCs (5 points)
+# Look back over the lectures and re-read precisely how MFCCs are computed.
+# You’ll need to compute MFCCs using an FFT function, but you’ll also have
+# to do the mel-warped frequency spectrum and the log magnitude as well.
+
+
+# Problem 3(b).
+# MFCC Specs (40 points)
+# Write a function to take a speech utterance and compute MFCCs. You need
+# only compute C0 through C12 (i.e., for each time t, you should produce
+# a 13-dimensional 4 feature vector xt 2 RN with N = 13. Each time frame t
+# should span a window of 25ms. Your frame rate should be 100Hz
+# (i.e., a 10ms skip between frames, as is typical).
+
+# record speech and save as .wav file
+fs = 16000
+time = 4
+ch = 1
+sd.default.samplerate = fs
+sd.default.channels = ch
+# filename = "prob3.wav"
+filename = "HW2p4.wav"
+
+# make_recording(fs, time, filename)
+signal = wv.read(filename)
+
+# compute MFCCs
+data = signal[1]
+# plt.plot(data)
+# plt.title('Signal')
+# plt.show()
+window = 25
+framerate = 100
+maxC = 12
+
+hamming_window = make_window(window, fs)
+produce_mfcc(data, hamming_window, fs, framerate, maxC)
+
+
+# Problem 3(c). Recordings (20 points)
+# Record and store as many as you can wavefiles of yourself saying the
+# following single phrases: “Odessa”, “Turn on the lights”,
+# “Turn off the lights”, “What time is it”, “Play music”, and “Stop music.”
+# I.e., you have a six phrase vocabulary. Each wavefile should consist of
+# a little bit of silence, the recording of the word, and then a bit of
+# silence at the end. Make sure that the recording levels are good
+# (i.e., the wavefiles should not be clipped, as that creates digital
+# distortion) but also should not be too low either (as that also
+# creates noise). Ideally, the peaks of the waveform should be about
+# 3dB down from the maximum intensity.
+
+
+# Problem 3(d).
+# MFCCs (20 points)
+# Compute MFCCs on each of your wavefiles and store them in separate matrices
+# (the matrices will be 13  T where T is the number of frames of speech.
+
+
+# Problem 3(e).
+# Delta features (20 points)
+# Once you have your matrix, compute delta features. Use a window size of M=2.
+# Concatenate your feature matrix with your delta-feature matrix to create
+# a feature matrix of dimension 26  (T 􀀀 2M).
+
+
+# Problem 3(f).
+# Question (20 points)
+# Why is your matrix of dimension 26  (T 􀀀 2M)?
+
+
+# Problem 3(g).
+# Turn In (5 points)
+# Turn in a plot of one waveform for each speech lexical item, and also a
+# plot of the corresponding 26  (T 􀀀 2M) matrix using the matlab function
+# imagesc. This means that you will turn in 5 waveforms, and 5 matrices,
+# one each for each word.
