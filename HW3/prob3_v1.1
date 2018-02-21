@@ -34,8 +34,22 @@ def make_window(w, freq):
     plt.show()
     return ham
 
-
+# have a windowed array of data points now
 def get_vector(array):
+    # 1) compute FFT- Make FFT length= to next power of 2 above window length
+	# 2) take magnitude of FFT (throw away phase)
+	# 3) compute mel filter warped spectra
+	# 4) take log of result
+	# 5) take IDFT / DCT
+	# 6) retain first 13 coefficients
+
+
+
+
+
+
+
+
     # The following works for only 1 frame
     plt.plot(array)
     plt.title('Windowed signal')
@@ -171,24 +185,24 @@ produce_mfcc(data, hamming_window, fs, framerate, maxC)
 # Problem 3(d).
 # MFCCs (20 points)
 # Compute MFCCs on each of your wavefiles and store them in separate matrices
-# (the matrices will be 13  T where T is the number of frames of speech.
+# (the matrices will be 13 x T where T is the number of frames of speech.
 
 
 # Problem 3(e).
 # Delta features (20 points)
 # Once you have your matrix, compute delta features. Use a window size of M=2.
 # Concatenate your feature matrix with your delta-feature matrix to create
-# a feature matrix of dimension 26  (T 􀀀 2M).
+# a feature matrix of dimension 26 x(T - 2M).
 
 
 # Problem 3(f).
 # Question (20 points)
-# Why is your matrix of dimension 26  (T 􀀀 2M)?
+# Why is your matrix of dimension 26 x (T - 2M)?
 
 
 # Problem 3(g).
 # Turn In (5 points)
 # Turn in a plot of one waveform for each speech lexical item, and also a
-# plot of the corresponding 26  (T 􀀀 2M) matrix using the matlab function
+# plot of the corresponding 26 x (T - 2M) matrix using the matlab function
 # imagesc. This means that you will turn in 5 waveforms, and 5 matrices,
 # one each for each word.
