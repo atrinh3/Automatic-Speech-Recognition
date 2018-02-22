@@ -34,68 +34,146 @@ def make_window(w, freq):
     plt.show()
     return ham
 
+
+def make_mel_banks(min, max, bins, nfft, fs):
+    mel_min = 1127 * math.log1p(1 + min / 700)
+    mel_max = 1127 * math.log1p(1 + max / 700)
+    mel_banks = [float(min)]
+    for i in range(1, bins+2):
+        mel_banks.append(i * (mel_max-mel_min)/bins)
+    # inverse mel
+    count = 0
+    for i in mel_banks:
+        value = 700 * (np.exp(i / 1125) - 1)
+        rounded = math.floor((nfft+1) * value / fs)
+        mel_banks[count] = 700 * (np.exp(i/1125) - 1)
+        count += 1
+    # plt.scatter(mel_banks, range(0, bins+2))
+    # plt.show()
+    return mel_banks
+
+
 # have a windowed array of data points now
-def get_vector(array):
-    # 1) compute FFT- Make FFT length= to next power of 2 above window length
-	# 2) take magnitude of FFT (throw away phase)
-	# 3) compute mel filter warped spectra
-	# 4) take log of result
-	# 5) take IDFT / DCT
-	# 6) retain first 13 coefficients
-
-
-
-
-
-
-
-
-    # The following works for only 1 frame
+def get_vector(array, fs):
     plt.plot(array)
     plt.title('Windowed signal')
     plt.show()
 
-    # compute FFT
-    out = np.fft.fft(array)
+    # 1) compute FFT- Make FFT length= to next power of 2 above window length
+    my_pad = int(np.power(2, 0 + np.ceil(np.log2(len(array)))))
+    out = np.fft.fft(array, my_pad)
     plt.plot(out)
     plt.title('FFT of signal')
     plt.show()
 
-    # take abs value
+    # 2) take magnitude of FFT (throw away phase)
     out = abs(out)
-
     plt.plot(out)
     plt.title('|FFT of signal|')
     plt.show()
 
+    # create mel banks
+    min = 0
+    max = 8000
+    bins = 10
+    mels = make_mel_banks(min, max, bins, my_pad, fs)
+
+    # 3) v1 compute mel filter warped spectra
+    # take first half of FFT since symmetrical.
+    # assume 26 filters.  257 FFT points = 26 x 257 vector
+    # sort into banks
+
+    # take half of array
+    tmp = len(out)/2 + 1
+    tmp = out[0:int(tmp)]
+
+    mel_filter(tmp, mels)
+
+
+def make_triangle(min, max, id, size):
+    triangle = []
+    # before triangle
+    for i in range(0, min):
+        triangle.append(0)
+    # first leg of triangle
+    mid = (max+min) / 2
+    for i in range(0, mid):
+        triangle.append(a bunch of stuff)
+    # second leg of triangle
+    for i in range(0, mid):
+        triangle.append(a bunch of more stuff)
+    # last leg of triangle
+    last = size - max
+    for i in range(0, last):
+        triangle.append(0)
+    return triangle
+
+def mel_filter(data, banks):
+    bins = len(banks) - 2
+    for i in range(0, banks):
+        lo = banks[i]
+        hi = banks[i + 1]
+        make_triangle(lo, hi, i, len(data))
+    filtered = []
+    return filtered
+
+
+    #
+    # # 3) v2 compute mel filter warped spectra
+    # count = 0
+    # for i in out:
+    #     out[count] = 1127 * math.log1p(1 + i / 700)
+    #     count += 1
+    # plt.plot(out)
+    # plt.title('Mel Warped |FFT of signal|')
+    # plt.show()
+
+    # 4) take log of result
+    # 5) take IDFT / DCT
+    # 6) retain first 13 coefficients
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     # take log
-    for i in range(0, len(array)):
-        out[i] = math.log10(out[i])
-    plt.plot(out)
-    plt.title('log|FFT of signal|')
-    plt.show()
+    # for i in range(0, len(array)):
+    #     out[i] = math.log10(out[i])
+    # plt.plot(out)
+    # plt.title('log|FFT of signal|')
+    # plt.show()
 
     # inverse dtft
-    out = np.fft.ifft(out)
-
-    plt.plot(out)
-    plt.title('IFFT of log|FFT of signal|')
-    plt.show()
+    # out = np.fft.ifft(out)
+    #
+    # plt.plot(out)
+    # plt.title('IFFT of log|FFT of signal|')
+    # plt.show()
 
     # test = test[0:100]
     # plt.plot(test)
     # plt.title('Truncated IFFT of log|FFT of signal|')
     # plt.show()
 
-    out = np.fft.fft(out)
-    # plt.plot(test[0:50])
-    plt.plot(out)
-    plt.title('FFT of lifted IFFT of log|FFT of signal|')
-    plt.show()
+    # out = np.fft.fft(out)
+    # # plt.plot(test[0:50])
+    # plt.plot(out)
+    # plt.title('FFT of lifted IFFT of log|FFT of signal|')
+    # plt.show()
 
-    out = np.fft
+    # out = np.fft
+    #
+    # return out
 
-    return out
 
 def produce_mfcc(signal, window, fs, fr, max):
     # have a window function
@@ -119,7 +197,7 @@ def produce_mfcc(signal, window, fs, fr, max):
         if count == 280:
             plt.plot(tmp)
             plt.show()
-            get_vector(tmp)
+            get_vector(tmp, fs)
         # coeff.append(get_vector(tmp))
         i += shift
         count += 1
