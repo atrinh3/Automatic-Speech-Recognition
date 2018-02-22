@@ -1,0 +1,51 @@
+import math
+import numpy as np
+import sounddevice as sd
+import scipy.io.wavfile as wv
+import matplotlib.pyplot as plt
+
+
+def get_sign(data):
+    if data >= 0:
+        return 1
+    return 0
+
+def find_zeros(data):
+	length = len(data)
+	sum = 0
+	for i in range(1, len(data)):
+		f = abs(get_sign(data[i]) - get_sign(data[i-1])) / 2
+		sum += f
+	return zc/length
+
+# Rabiner/Sambur Algorithm
+fs = 16000
+range = 10    # in ms
+
+sample = fs * range/1000    # qty of data points in windowed sample
+zero_crossings = find_zeros(sample)
+
+
+# 1) Compute Es(n) for n ranging over the segment of audio.
+
+# 2) Compute IMX and IMN, the max and min respectivly of Es(n).
+
+# 3) Set ITL = min(0.03 * (IMX - IMN) + IMN, 4 * IMN), and
+#        ITU = 5 * ITL, 
+#        the upper and lower thresholds of the engery respectively
+
+# 4) IZCT = min(IF, IZC+ 2oIZC) where IF = 25, and IZC(resp. oIZC)
+#    is the mean (resp. standard deviation) of the zero crossing array
+#    during silence (i.e., the first 100ms of the signal). IZCT is the
+#    zero crossing threshold.
+
+# 5) Start at the beginning of the speech signal. Search towards the 
+#    center until the first fram where Es(n) goes above ITL and then
+#    above ITU without first going below ITL. Call this point N1.
+
+# 6) Search starting at frame N1 to frame N1 - 25 (in this case a
+#    250ms interval) and if the number of frames whose zero-crossing
+#    is greater than IZCT is three or more, the starting point it 
+#    changed to the first such frame N1' in that 25 frame interval
+#    whose threshole exceeds IZCT. Otherwise leave the segment point
+#    alone.
