@@ -97,11 +97,15 @@ def make_triangle(min, max, id, size):
         triangle.append(0)
     # first leg of triangle
     mid = (max+min) / 2
-    for i in range(0, mid):
-        triangle.append(a bunch of stuff)
+    for i in range(min, mid):
+        k = len(triangle)
+        add = (k - f[m-1]) / (f[m] - f[m-1])
+        triangle.append(add)
     # second leg of triangle
-    for i in range(0, mid):
-        triangle.append(a bunch of more stuff)
+    for i in range(mid, max):
+        k = len(triangle)
+        add = (f[m+1] - k) / (f[m+1] - f[m])
+        triangle.append(add)
     # last leg of triangle
     last = size - max
     for i in range(0, last):
