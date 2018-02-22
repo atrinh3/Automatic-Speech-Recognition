@@ -18,26 +18,60 @@ def find_zeros(data):
 		sum += f
 	return zc/length
 
+	
+def get_energy(data, window):
+    e = []
+	i = 0
+	while i <= len(data):
+	    sum = 0
+		for j in range(0, window):
+	        sum += abs(data[i + j])
+		e.append(sum)
+		i += window
+    return e
+	
+	
 # Rabiner/Sambur Algorithm
 fs = 16000
 range = 10    # in ms
+signal = audiosample
 
 sample = fs * range/1000    # qty of data points in windowed sample
 zero_crossings = find_zeros(sample)
 
 
 # 1) Compute Es(n) for n ranging over the segment of audio.
+energy = get_energy(signal, sample)
 
 # 2) Compute IMX and IMN, the max and min respectivly of Es(n).
+imn = energy[0]
+imx = imn
+for i in range(0, len(energy)):
+    if energy[i] < imn:
+	    imn = energy[i]
+	elif energy[i] > imx:
+	    imx = energy[i]
 
 # 3) Set ITL = min(0.03 * (IMX - IMN) + IMN, 4 * IMN), and
 #        ITU = 5 * ITL, 
 #        the upper and lower thresholds of the engery respectively
+itl = min(0.03*(imx-imn) + imn, 4 * imn)
+itu = 5 * ITL
 
 # 4) IZCT = min(IF, IZC+ 2oIZC) where IF = 25, and IZC(resp. oIZC)
 #    is the mean (resp. standard deviation) of the zero crossing array
 #    during silence (i.e., the first 100ms of the signal). IZCT is the
 #    zero crossing threshold.
+assumed_silence = 100    # assume first 100ms is always silent
+zc_control = 25
+zc_array = []
+for i in range(0: assumed_silence/range):
+    start = i * sample
+	end = i*sample + sample
+	zc_array.append(find_zeros(signal[start:end]))
+zc_mean = np.mean(zc_array)
+std = np.std(zc_array)
+izct = min(zc_control, zc_mean + 2*std)
 
 # 5) Start at the beginning of the speech signal. Search towards the 
 #    center until the first fram where Es(n) goes above ITL and then
@@ -48,4 +82,4 @@ zero_crossings = find_zeros(sample)
 #    is greater than IZCT is three or more, the starting point it 
 #    changed to the first such frame N1' in that 25 frame interval
 #    whose threshole exceeds IZCT. Otherwise leave the segment point
-#    alone.
+# alone.
