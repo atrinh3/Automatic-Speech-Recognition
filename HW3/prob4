@@ -125,7 +125,7 @@ print('mean is %f, std is %f, izct is %f' % (zc_mean, std, izct))
 #    is greater than IZCT is three or more, the starting point it
 #    changed to the first such frame N1' in that 25 frame interval
 #    whose threshole exceeds IZCT. Otherwise leave the segment point
-# alone.
+#    alone.
 
 intervals = 25  # frames
 [N1, N_Prime] = listen(signal, energy, itl, itu, intervals, sample, std)
