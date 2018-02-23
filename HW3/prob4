@@ -55,17 +55,17 @@ def listen(data, energy, lower, upper, frames, width, std):
 
 def zero_check(data, N1, frames, width, zt):
     count = 0
+    least = N1*width
     for i in range(1, frames):
         id = N1*width - i*width
         start = int(id)
         end = int(start + width)
-        # print(find_zeros(data[start:end]))
         if find_zeros(data[start:end]) >= math.floor(zt):
             count += 1
-            if count >= 3:
-                test = id/width
-                print("returning N' as %f" % test)
-                return int(id/width)
+            if id < least:
+                least = id
+    if count >= 3:
+        return int(least / width)
     return None
 
 
@@ -129,4 +129,4 @@ print('mean is %f, std is %f, izct is %f' % (zc_mean, std, izct))
 
 intervals = 25  # frames
 [N1, N_Prime] = listen(signal, energy, itl, itu, intervals, sample, std)
-print(N1)
+print("N1 is %f and N1' is %f" % (N1, N_Prime))
