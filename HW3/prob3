@@ -26,74 +26,103 @@ def save_wav(filename, recording, fs):
 # The "make_window" function takes a window width parameter and returns
 # an array representing the Hamming window
 def make_window(w, freq):
-    sample_size = int(freq*w / 1000)
+    sample_size = int(freq * w / 1000)
     ham = []
     for n in range(0, sample_size):
         ham.append(0.54 - 0.46 * math.cos(2 * math.pi * n / sample_size))
-    plt.plot(ham)
-    plt.show()
     return ham
 
 
-def get_vector(array):
-    # The following works for only 1 frame
-    plt.plot(array)
-    plt.title('Windowed signal')
-    plt.show()
+def make_mel_banks(min, bins, fs):
+    mel_min = 1127 * math.log1p(1 + min/700)
+    mel_max = 1127 * math.log1p(1 + fs/700)
+    mel_banks = [float(min)]
+    for i in range(1, bins+2):
+        mel_banks.append(i * (mel_max - mel_min) / bins)
+    # inverse mel
+    count = 0
+    for i in mel_banks:
+        mel_banks[count] = 700 * (np.exp(i / 1125) - 1)
+        count += 1
+    return mel_banks
 
-    # compute FFT
-    out = np.fft.fft(array)
-    plt.plot(out)
-    plt.title('FFT of signal')
-    plt.show()
 
-    # take abs value
+def make_triangle(min, max, size, nfft, maxf):
+    low = int(math.floor((nfft + 1) * min / maxf))
+    high = int(math.floor((nfft + 1) * max / maxf))
+    mid = int((low + high) / 2)
+    triangle = []
+    for i in range(0, low):
+        triangle.append(0)
+    for i in range(low, mid):
+        id = len(triangle)
+        triangle.append((id - low) / (mid - low))
+    for i in range(mid, high):
+        id = len(triangle)
+        triangle.append((high - id) / (high - mid))
+    for i in range(high, size):
+        triangle.append(0)
+    return triangle
+
+
+def mat_multiply(a, b):
+    sum = 0
+    for i in range(0, len(a)):
+        sum += a[i] * b[i]
+    return sum
+
+
+def mel_filter(data, banks, nfft):
+    filtered = []
+    maxf = max(banks)
+    for i in range(2, len(banks)):
+        lo = banks[i-2]
+        hi = banks[i]
+        tri = make_triangle(lo, hi, len(data), nfft, maxf)
+        coefficient = mat_multiply(data, tri)
+        filtered.append(coefficient)
+    # 4) take log of result
+    for i in range(0, len(filtered)):
+        filtered[i] = math.log10(abs(filtered[i]))
+    return filtered
+
+
+# have a windowed array of data points now
+def get_vector(array, fs, max):
+    # 1) compute FFT- Make FFT length= to next power of 2 above window length
+    my_pad = int(np.power(2, 0 + np.ceil(np.log2(len(array)))))
+    out = np.fft.fft(array, my_pad)
+
+    # 2) take magnitude of FFT (throw away phase)
     out = abs(out)
 
-    plt.plot(out)
-    plt.title('|FFT of signal|')
-    plt.show()
+    # create mel banks
+    min = 0
+    bins = 23
+    mels = make_mel_banks(min, bins, fs)
 
-    # take log
-    for i in range(0, len(array)):
-        out[i] = math.log10(out[i])
-    plt.plot(out)
-    plt.title('log|FFT of signal|')
-    plt.show()
+    # 3) v1 compute mel filter warped spectra
+    # take half of array
+    tmp = len(out) / 2 + 1
+    tmp = out[0:int(tmp)]
 
-    # inverse dtft
-    out = np.fft.ifft(out)
+    # 5) take IDFT / DCT
+    out = np.fft.irfft(mel_filter(tmp, mels, my_pad/2))
 
-    plt.plot(out)
-    plt.title('IFFT of log|FFT of signal|')
-    plt.show()
+    # 6) retain first 13 coefficients
+    return out[0:max+1]
 
-    # test = test[0:100]
-    # plt.plot(test)
-    # plt.title('Truncated IFFT of log|FFT of signal|')
-    # plt.show()
-
-    out = np.fft.fft(out)
-    # plt.plot(test[0:50])
-    plt.plot(out)
-    plt.title('FFT of lifted IFFT of log|FFT of signal|')
-    plt.show()
-
-    out = np.fft
-
-    return out
 
 def produce_mfcc(signal, window, fs, fr, max):
     # have a window function
     # want to apply window to signal
     # perform cepstrum operations to windowed signal
     # repeat with window shifted
-
     window_length = len(window)
     signal_length = len(signal)
-    shift = 1/fr * fs
+    shift = 1 / fr * fs
 
-    coeff = []
+    mfcc = []
     i = 0
     count = 0
     while i + window_length <= signal_length:
@@ -102,14 +131,27 @@ def produce_mfcc(signal, window, fs, fr, max):
         end = int(i + window_length)
         tmp = signal[start:end]
         tmp = np.multiply(tmp, window)
-        if count == 280:
-            plt.plot(tmp)
-            plt.show()
-            get_vector(tmp)
-        # coeff.append(get_vector(tmp))
+        mfcc.append(get_vector(tmp, fs, max))
         i += shift
         count += 1
+    return mfcc
 
+
+def get_delta(data, diameter, max):
+    length = len(data)
+    d = np.zeros((max+1, length))
+    for i in range(0, max+1):
+        for j in range(0, length):
+            if diameter <= j < length - diameter:
+                num = 0
+                den = 0
+                for k in range(-diameter, diameter + 1):
+                    num += k * data[j + k][i]
+                    den += k * k
+                d[i][j] = num / den
+            else:
+                d[i][j] = 0
+    return d
 
 
 # =============#
@@ -136,24 +178,18 @@ time = 4
 ch = 1
 sd.default.samplerate = fs
 sd.default.channels = ch
-# filename = "prob3.wav"
-filename = "HW2p4.wav"
+filename = "prob3.wav"
 
-# make_recording(fs, time, filename)
+make_recording(fs, time, filename)
 signal = wv.read(filename)
 
 # compute MFCCs
 data = signal[1]
-# plt.plot(data)
-# plt.title('Signal')
-# plt.show()
 window = 25
 framerate = 100
 maxC = 12
-
+delta_diameter = 2
 hamming_window = make_window(window, fs)
-produce_mfcc(data, hamming_window, fs, framerate, maxC)
-
 
 # Problem 3(c). Recordings (20 points)
 # Record and store as many as you can wavefiles of yourself saying the
@@ -171,24 +207,33 @@ produce_mfcc(data, hamming_window, fs, framerate, maxC)
 # Problem 3(d).
 # MFCCs (20 points)
 # Compute MFCCs on each of your wavefiles and store them in separate matrices
-# (the matrices will be 13  T where T is the number of frames of speech.
+# (the matrices will be 13 x T where T is the number of frames of speech.
+mfcc = produce_mfcc(data, hamming_window, fs, framerate, maxC)
 
 
 # Problem 3(e).
 # Delta features (20 points)
 # Once you have your matrix, compute delta features. Use a window size of M=2.
 # Concatenate your feature matrix with your delta-feature matrix to create
-# a feature matrix of dimension 26  (T 􀀀 2M).
-
+# a feature matrix of dimension 26 x(T - 2M).
+delta = get_delta(mfcc, delta_diameter, maxC)
+features = []
+for i in range(0, len(delta[:, 1])):
+    feature_vector = []
+    for k in range(0, len(mfcc[i])):
+        feature_vector.append(mfcc[i][k])
+    for j in range(0, len(mfcc[i])):
+        feature_vector.append(delta[i][j])
+    features.append(feature_vector)
 
 # Problem 3(f).
 # Question (20 points)
-# Why is your matrix of dimension 26  (T 􀀀 2M)?
+# Why is your matrix of dimension 26 x (T - 2M)?
 
 
 # Problem 3(g).
 # Turn In (5 points)
 # Turn in a plot of one waveform for each speech lexical item, and also a
-# plot of the corresponding 26  (T 􀀀 2M) matrix using the matlab function
+# plot of the corresponding 26 x (T - 2M) matrix using the matlab function
 # imagesc. This means that you will turn in 5 waveforms, and 5 matrices,
 # one each for each word.
