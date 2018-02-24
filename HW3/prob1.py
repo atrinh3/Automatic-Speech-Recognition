@@ -53,6 +53,7 @@ def make_spectrogram(s, nfft, npower, fs, row, id, fig, ax):
         pad_to=my_pad,
         noverlap=my_noverlap,
         cmap=my_cmap)
+    print("debug")
 
 
 def prob_1_a(w, data, fs, row, figure, ax):
@@ -67,7 +68,7 @@ def prob_1_a(w, data, fs, row, figure, ax):
 # -------------#
 fs = 16000  # 16kHz sample rate
 duration = 4  # 4 seconds
-filename = "prob1a.wav"
+filename = "Odessa_1.wav"
 sd.default.samplerate = fs
 sd.default.channels = 1
 row = 5
@@ -79,7 +80,7 @@ signal = wv.read(filename)
 # print(type(signal))
 # print(type(signal[1]))
 
-fig, ax = plt.subplots(row, col)
+fig, ax = plt.subplots(row, col, sharex='all', sharey='all')
 fig.set_size_inches(6, 8)
 # print(ax.shape[0]) # 5
 # print(ax.shape[1]) # 4
@@ -93,8 +94,6 @@ prob_1_a(50, signal, fs, 4, fig, ax)
 prob_1_a(100, signal, fs, 5, fig, ax)
 
 fig.suptitle('Spectrogram Grid')
-# fig.xlabel('"Next Power" parameter')
-# fig.ylabel('Increasing window sizes')
 plt.show()
 
 # Prob 1a
