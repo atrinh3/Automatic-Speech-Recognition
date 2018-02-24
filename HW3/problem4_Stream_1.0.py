@@ -63,10 +63,14 @@ def zero_check(data, N1, frames, width, zt):
     return None
 
 
-def detect_voice(signal, fs):
+def detect_voice(signal):
     # Rabiner/Sambur Algorithm
+    fs = 16000
     window = 10  # in ms
     assumed_silence = 100  # assume first 100ms is always silent
+    itl = 8081
+    itu = 40407
+
     sample = fs * window / 1000
     energy = get_energy(signal, sample)
 
@@ -106,7 +110,7 @@ def detect_voice(signal, fs):
 
 def callback(indata, frames, time, status):
     """This is called (from a separate thread) for each audio block."""
-    if detect_voice:
+    if detect_voice(indata):
         print("Voice detected")
     else:
         print("No voice")
