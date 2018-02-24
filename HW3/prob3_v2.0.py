@@ -149,21 +149,6 @@ def get_delta(data, diameter):
                 num += np.multiply(j, a1)
                 den += j * j
                 d.append(num/den)
-            # else:
-            #     d.append(np.multiply(0, a1))
-
-    # d = np.zeros((max+1, length))
-    # for i in range(0, max+1):
-    #     for j in range(0, length):
-    #         if diameter <= j < length - diameter:
-    #             num = 0
-    #             den = 0
-    #             for k in range(-diameter, diameter + 1):
-    #                 num += k * data[j + k][i]
-    #                 den += k * k
-    #             d[i][j] = num / den
-    #         else:
-    #             d[i][j] = 0
     return d
 
 
@@ -191,7 +176,13 @@ time = 4
 ch = 1
 sd.default.samplerate = fs
 sd.default.channels = ch
-filename = "Odessa_1.wav"
+
+# filename = 'Odessa_1.wav'
+# filename = 'LightsOn_1.wav'
+# filename = 'LightsOff_1.wav'
+# filename = 'PlayMusic_1.wav'
+# filename = 'StopMusic_1.wav'
+filename = 'Time_1.wav'
 
 # make_recording(fs, time, filename)
 signal = wv.read(filename)
@@ -238,11 +229,9 @@ for i in range(0, len(delta)):
     test = np.concatenate((a1, a2))
     features.append(test)
 
-
 # Problem 3(f).
 # Question (20 points)
 # Why is your matrix of dimension 26 x (T - 2M)?
-
 
 # Problem 3(g).
 # Turn In (5 points)
