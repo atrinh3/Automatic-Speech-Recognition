@@ -17,7 +17,7 @@ def find_zeros(data):
         a = get_sign(data[i])
         b = get_sign(data[i - 1])
         sum += int(abs(a - b) / 2)
-    return sum/len(data)
+    return sum
 
 
 def get_energy(data, window):
@@ -54,6 +54,8 @@ def zero_check(data, N1, frames, width, zt):
         id = N1 * width - i * width
         start = int(id)
         end = int(start + width)
+        # print('index %i' % i)
+        # print("start %i, to end %i" % (start, end))
         if find_zeros(data[start:end]) >= math.floor(zt):
             count += 1
             if id < least:
@@ -69,7 +71,8 @@ def detect_voice(signal):
     window = 10  # in ms
     assumed_silence = 100  # assume first 100ms is always silent
     itl = 8081
-    itu = 40407
+    # itu = 40407
+    itu = 30000
 
     sample = fs * window / 1000
     energy = get_energy(signal, sample)
@@ -114,9 +117,9 @@ def callback(indata, frames, time, status):
         print("Voice detected")
     else:
         print("No voice")
-    if status:
-        print(status)
-        print(sys.stderr)
+    # if status:
+    #     print(status)
+    #     print(sys.stderr)
     wavfile.write(indata)
 
 
@@ -124,7 +127,7 @@ def callback(indata, frames, time, status):
 #     START    #
 # -------------#
 chunk = 4096
-duration = 5
+duration = 30
 channels = 1
 fs = 16000
 filename = "Problem4Stream.wav"
