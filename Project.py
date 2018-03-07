@@ -1,6 +1,17 @@
 import numpy as np
 
 
+def get_transition(states):
+    mat = [[0] * states] * states
+	for i in range(0, states - 1):
+	    mat[i][i] = .5
+		mat[i][i + 1] = .5
+	mat[states][states] = 1
+	# debugging
+	plt.imshow(mat)
+	plt.show()
+	return mat
+	
 def prob_observation(mean, covariance, mfcc):
     # mean and covariance describes the state
     n = len(mean)
