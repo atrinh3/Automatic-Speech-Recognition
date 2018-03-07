@@ -51,9 +51,20 @@ def prob_evidence(alpha, beta):
     return evidence
 
 
+# Build this get_gamma function into the get_alpha function
 def get_gamma(alpha, beta, state):
     out = np.dot(alpha, beta)
     return alpha[state] * beta[state] / out
+
+
+def get_xi(alpha, beta, transition, covariance, mfcc, t, state):
+    # p(observation) * beta[q][t] * p(transition) * alpha[q-1][t-1]
+	state = STATE
+	po = prob_observation(mean, covariance, mfcc)
+	trans = transition[state(t)][state(t-1)]
+	b = beta[state][t]
+	a = alpha[state-1][t-1]
+	return po * b * trans * a
 
 
 # START
