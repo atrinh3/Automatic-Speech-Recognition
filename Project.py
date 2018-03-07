@@ -3,17 +3,16 @@ import numpy as np
 
 def prob_observation(mean, covariance, mfcc):
     # mean and covariance describes the state
-    n = len(covariance)
+    n = len(mean)
     product = 1
     for i in range(0, n):
         product = product * covariance[i]
     denominator = ((2*np.pi)**(n/2) * np.sqrt(product))
     left = 1/denominator
+	var = mfcc - mean
     sum = 0
     for i in range(0, n):
-        top = (mfcc[i] - mean[i])**2
-        bot = covariance[i]
-        sum += top/bot
+        sum += var[i]**2 / covariance[i]
     right = np.exp(-.5 * sum)
     return left * right
 
