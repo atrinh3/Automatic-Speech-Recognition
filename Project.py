@@ -12,6 +12,7 @@ def get_transition(states):
 	plt.show()
 	return mat
 	
+	
 def prob_observation(mean, covariance, mfcc):
     # mean and covariance describes the state
     n = len(mean)
