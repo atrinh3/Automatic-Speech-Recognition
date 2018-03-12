@@ -25,10 +25,10 @@ def make_window(w, freq):
 
 
 def make_mel_banks(min, bins, fs):
-    mel_min = 1127 * math.log1p(1 + min/700)
-    mel_max = 1127 * math.log1p(1 + fs/700)
+    mel_min = 1127 * math.log1p(1 + min / 700)
+    mel_max = 1127 * math.log1p(1 + fs / 700)
     mel_banks = [float(min)]
-    for i in range(1, bins+2):
+    for i in range(1, bins + 2):
         mel_banks.append(i * (mel_max - mel_min) / bins)
     # inverse mel
     count = 0
@@ -67,7 +67,7 @@ def mel_filter(data, banks, nfft):
     filtered = []
     maxf = max(banks)
     for i in range(2, len(banks)):
-        lo = banks[i-2]
+        lo = banks[i - 2]
         hi = banks[i]
         tri = make_triangle(lo, hi, len(data), nfft, maxf)
         coefficient = mat_multiply(data, tri)
@@ -98,10 +98,10 @@ def get_vector(array, fs, max):
     tmp = out[0:int(tmp)]
 
     # 5) take IDFT / DCT
-    out = np.fft.irfft(mel_filter(tmp, mels, my_pad/2))
+    out = np.fft.irfft(mel_filter(tmp, mels, my_pad / 2))
 
     # 6) retain first 13 coefficients
-    return out[0:max+1]
+    return out[0:max + 1]
 
 
 def produce_mfcc(signal, window, fs, fr, max):
@@ -138,19 +138,17 @@ def get_delta(data, diameter):
             if diameter <= j < length - diameter:
                 num += np.multiply(j, a1)
                 den += j * j
-                d.append(num/den)
+                d.append(num / den)
     return d
 
 
 # Initializing transition probabilities so that every transition that's not
 # maintaining state or going to the next state is = 0.
 def get_transition(states):
-    mat = np.ndarray([states, states]) * 0
+    mat = [[0]*states] * states
     for i in range(0, states - 1):
         mat[i][i] = np.random.normal(0.5, .05, 1)
         mat[i][i + 1] = 1 - mat[i][i]
-        # mat[i][i] = .5
-        # mat[i][i + 1] = .5
     mat[states - 1][states - 1] = 1
     # debugging
     # plt.imshow(mat)
@@ -189,39 +187,47 @@ def prob_observation(mean, covariance, mfcc, states):
 
 def prob_evidence(alpha, beta):
     # p(x[1:t])
-    result =  []
+    result = []
     for t in range(0, len(alpha)):
         result.append(np.dot(alpha[t], beta[t]))
     return result
 
 
 # Equation from lecture 9, F58/77 & hw5.pdf equation (21)
-# mean:        Mean vector including the global mean values
+# mean:        1 x N x Q Mean matrix that has means for each state
 # covariance:  1xN dim. matrix containing global covariance values
 # mfcc:        Single MFCC vector
-def prob_observation_v2(mean, covariance, mfcc):
+def prob_observation_v2(means, covariance, mfcc):
     # mean and covariance describes the state
-    length = len(mean)
+    length = len(means[0])
     product = 1
     for i in range(0, length):
         product = product * covariance[i]
     left = 1 / (((2 * np.pi) ** (length / 2)) * np.sqrt(product))
-    diff = np.subtract(mfcc, mean)
-    sum = 0
-    for i in range(0, length):
-        sum += (diff[i] ** 2) / covariance[i]
-    right = np.exp(-0.5 * sum)
-    return left * right
+    output = []
+    for q in range(0, len(means)):
+        diff = np.subtract(mfcc, means[q])
+        diff = np.power(diff, 2)
+        diff = np.divide(diff, covariance)
+        diff = np.sum(diff)
+        right = np.exp(-0.5 * diff)
+        output.append(left * right)
+    print(np.shape(output))
+    return output
 
 
 # Returns a vector consisting of the mean of each element of the MFCC
-def get_mean(mfcc):
-    mean = []
+def get_mean(mfcc, states):
     t = len(mfcc)
     n = len(mfcc[0])
-    for i in range(0, n):
-        m = np.mean(mfcc[i])
-        mean.append(m)
+    mean = [[0] * n] * states
+    for q in range(0, states):
+        noise = np.random.normal(0, .01, n)
+        mu_q = []
+        for i in range(0, n):
+            tmp = np.add(mfcc[i], noise)
+            mu_q.append(np.mean(tmp))
+        mean[q] = mu_q
     return mean
 
 
@@ -231,10 +237,11 @@ def get_covariance(mfcc, mean):
     t = len(mfcc)
     n = len(mfcc[0])
     covariance = []
-    for i in range(0, n):      # 0 - 25
+    m = mean[0]
+    for i in range(0, n):  # 0 - 25
         sum = 0
-        for j in range(0, t):  # 0 - T
-            sum += (mfcc[j][i] - mean[i]) ** 2
+        for j in range(0, t):  # 0 - T-1
+            sum += (mfcc[j][i] - m[i]) ** 2
         covariance.append(sum / t)
     return covariance
 
@@ -294,11 +301,10 @@ def get_alphas(passed_mean, passed_covariance, passed_trans, passed_mfcc, states
             # i = TO state, j = FROM state
             transition_probability = passed_trans[j][i]
             sum += transition_probability * last_alpha[t - 1][j]
-        noise = np.random.normal(0, .01, len(passed_mean))
-        observation = prob_observation_v2(passed_mean + noise,
+        observation = prob_observation_v2(passed_mean,
                                           passed_covariance,
                                           passed_mfcc[t - 1])
-        current_alpha.append(observation * sum)
+        current_alpha.append(observation[i] * sum)
     last_alpha.append(current_alpha)
     return last_alpha
 
@@ -359,6 +365,8 @@ def get_gamma(alpha, beta, num_states, t):
         tmp = a[i] * b[i] / sum
         gamma.append(tmp)
     return gamma
+
+
 # returns a 1xQ vector
 
 
@@ -375,7 +383,7 @@ def get_gamma(alpha, beta, num_states, t):
 def get_xi(alpha, beta, transition, covariance, mfcc, mean, states, t):
     # observation
     mfcc_v = mfcc[t]
-    p_o = prob_observation_v2(mean, covariance, mfcc_v)   # 1x1
+    p_o = prob_observation_v2(mean, covariance, mfcc_v)  # 1x1
     a = alpha(t - 1)  # Qx1
     b = beta(t)  # Qx1
     e = prob_evidence(alpha, beta)[t]
@@ -407,7 +415,7 @@ def get_mfcc(waveform, hamming, fs):
     delta_diameter = 2
     mfcc = produce_mfcc(waveform, hamming, fs, framerate, maxC - 1)
     delta = get_delta(mfcc, delta_diameter)
-    tmp = mfcc[delta_diameter : len(mfcc) - delta_diameter]
+    tmp = mfcc[delta_diameter: len(mfcc) - delta_diameter]
     features = []
     for i in range(0, len(delta)):
         features.append(np.concatenate((tmp[i], delta[i])))
@@ -469,6 +477,57 @@ def learn_transition(alphas, betas, mfccs, states):
     return sum_transition / len(alphas)
 
 
+# Equation 9.69 from Lecutre 9, F60/77
+# alphas:        Q x T x \ell Set of alpha matrices
+# betas:         Q x T x \ell Set of beta matrices
+# states:        Number of states in the HMM
+# mfccs:         N x T x \ell Set of \ell MFCC matrices
+def learn_means(alphas, betas, states, mfccs):
+    mfcc_coeffs = len(mfccs[0][0][0])
+    sum_num = [[0] * mfcc_coeffs] * states
+    sum_den = [[0] * mfcc_coeffs] * states
+    for ell in range(0, len(alphas)):
+        a = alphas[ell]
+        b = betas[ell]
+        mfcc = mfccs[ell]
+        for t in range(0, len(alphas[0])):
+            gamma_t = get_gamma(a, b, states, t)
+            sum_den = np.add(sum_den, gamma_t)
+            for q in range(0, states):
+                sum_num[q] = np.add(sum_num[q],
+                                    np.multiply(mfcc[t], gamma_t[q]))
+    out = np.divide(sum_num, sum_den)
+    return out
+
+
+# Equation 9.70 from lecture 9, F60/77
+# alphas:        Q x T x \ell Set of alpha matrices
+# betas:         Q x T x \ell Set of beta matrices
+# mfccs:         N x T x \ell Set of \ell MFCC matrices
+# states:        Number of states in the HMM
+# learned_mean:  1 x N x Q Set of mean MFCC values for each state
+def learn_covariances(alphas, betas, mfccs, states, learned_mean):
+    # Should end up with a 3D matrix of size N x N x Q
+    # i.e. Each state should have an N x N covariance matrix
+    # But since result will be a diagonal matrix, can be 1 x N
+    sum_num = [0] * len(learned_mean[0])
+    sum_den = [0] * len(learned_mean[0])
+    for ell in range(0, len(alphas)):
+        mfcc = mfccs[ell]
+        a = alphas[ell]
+        b = betas[ell]
+        for t in range(0, len(alphas[0])):
+            gamma_t = get_gamma(a, b, states, t)
+            x_t = mfcc[t]
+            sum_den = np.add(sum_den, gamma_t)
+            for q in range(0, states):
+                mean_q = learned_mean[q]
+                tmp = gamma_t[q] * (x_t - mean_q) ** 2
+                sum_num = np.add(sum_num, tmp)
+    out = np.divide(sum_num, sum_den)
+    return out
+
+
 # =============#
 #     START    #
 # -------------#
@@ -490,29 +549,25 @@ global_mfcc.extend(combine_mfcc(utterances, "PlayMusic", hamming_window, fs))
 global_mfcc.extend(combine_mfcc(utterances, "StopMusic", hamming_window, fs))
 global_mfcc.extend(combine_mfcc(utterances, "Time", hamming_window, fs))
 
-global_mean = get_mean(global_mfcc)
+global_mean = get_mean(global_mfcc, 1)
 global_covariance = get_covariance(global_mfcc, global_mean)
 
 # Odessa Training
 odessa_states = 10
+training_means = get_mean(global_mfcc, odessa_states)
 odessa_alphas = [None] * utterances
 odessa_betas = [None] * utterances
 odessa_transition_guess = get_transition(odessa_states)
-odessa_training_mfcc = []
-for i in range(0, utterances + 1):
+odessa_training_mfccs = []
+for i in range(1, utterances + 1):
     filename = "Odessa_%i.wav" % i
     data = wv.read(filename)[1]
-    odessa_training_mfcc.append(get_mfcc(data, hamming_window, fs))
+    odessa_training_mfccs.append(get_mfcc(data, hamming_window, fs))
+
 for i in range(0, utterances):
     filename = "Odessa_%i.wav" % (i + 1)
     data = wv.read(filename)[1]
     tmp = get_mfcc(data, hamming_window, fs)
-    # odessa_alpha[i] = get_alphas(
-    #     prob_observation(global_mean, global_covariance, tmp, odessa_states),
-    #     odessa_transition,
-    #     tmp,
-    #     odessa_states,
-    #     len(tmp))
     odessa_alphas[i] = get_alphas(
         global_mean,
         global_covariance,
@@ -529,67 +584,18 @@ for i in range(0, utterances):
         0)
     print(odessa_betas[0])
 odessa_initial_em = learn_initial(
-    odessa_alphas, 
+    odessa_alphas,
     odessa_betas)
 odessa_transition_em = learn_transition(
     odessa_alphas,
     odessa_betas,
-    odessa_training_mfcc,
+    odessa_training_mfccs,
     odessa_states)
-odessa_gaussians_em = learn_gaussians()
-
-def learn_gaussians(alphas, betas, states, mfccs):
-    sum_num = 0
-    sum_den = 0
-    for ell in range(0, len(alphas)):
-        a = alphas[ell]
-        b = betas[ell]
-        mfcc = mfccs[ell]
-        for t in range(0, len(alphas[0])):
-            # MEAN
-            # pseudo code:
-            gamma_t = get_gamma(a, b, states, t)
-            sum_num += np.multiply(mfcc[t], gamma_t)
-            sum_den += gamma_t
-        for t in range(0, len(alphas[0])):
-            # COVARIANCE
-            # pseudo code:
-            
-            # ((x(t) - mean) ^ 2) * gamma_q(t)
-            # divided by
-            # gamma_q(t)
-
-def lean_covariances(alphas, betas, mfccs, states, learned_mean):
-    # Should end up with a 3D matrix of size N x N x Q 
-    # i.e. Each state should have an N x N covariance matrix
-    for ell in range(0, len(alphas)):
-        mfcc = mfccs[ell]
-        a = alphas[ell]
-        b = betas[ell]
-        for t in range(0, len(alphas[0])):
-            gamma_t = get_gamma(a, b, states, t)
-            # pseud code:
-            for q in range(0, states): 
-                # ((mfcc[t] - mean[q]) ^ 2) * gamma_t[q]
-                gamma
-            
-    # YOU ARE HERE
-    # YOU ARE HERE
-    # YOU ARE HERE
-    # YOU ARE HERE
-    # YOU ARE HERE
-    # YOU ARE HERE
-    
-    
-    
-# Equation from lecture 9, F19/77
-# alpha:       Alpha matrix
-# beta:        Beta matrix
-# num_states:  Number of states
-# t:           Time step
-# def get_gamma(alpha, beta, num_states, t):
-
-
+odessa_gaussians_em = learn_means(
+    odessa_alphas,
+    odessa_betas,
+    odessa_states,
+    odessa_training_mfccs)
 
 
 
@@ -621,7 +627,6 @@ def lean_covariances(alphas, betas, mfccs, states, learned_mean):
 #
 # odessa_utterances = 20
 # hamming_window = make_window(window, fs)
-
 
 
 # Write code for the data structures & algorithms of the HMMs
@@ -661,8 +666,3 @@ def lean_covariances(alphas, betas, mfccs, states, learned_mean):
 
 
 # ASR
-
-
-
-
-
