@@ -191,15 +191,6 @@ def prob_observation(mean, covariance, mfcc, states):
 
 def prob_evidence(alpha):
     # p(x[1:t])
-    # result = []
-    # currenta = alpha[t]
-    # currentb = beta[t]
-    # sum = 0
-    # for q in range(0, len(currenta)):
-    #     tmpa = currenta[q]
-    #     tmpb = currentb[q]
-    #     sum += currenta[q] * currentb[q]
-    # return result
     tmp = alpha[len(alpha) - 1]
     sum = 0
     for i in range(0, len(tmp)):
@@ -315,7 +306,7 @@ def get_alphas(passed_mean, passed_covariance, passed_trans, passed_mfcc, states
         observation = prob_observation_v2(passed_mean,
                                           passed_covariance,
                                           passed_mfcc[t - 1])
-        current_alpha.append(observation[i] * sum)
+        current_alpha.append(observation[q] * sum)
     sum = 0
     for q in range(0, states):
         sum += current_alpha[q]
@@ -383,7 +374,6 @@ def get_gamma(alpha, beta, num_states, t):
 # t:           Time step in the MFCC
 def get_xi(alpha, beta, transition, covariance, mfcc, means, states, t):
     # observation
-    # mfcc_v = mfcc[t - 1]
     mfcc_v = mfcc[t]
     p_o = prob_observation_v2(means, covariance, mfcc_v)  # 1xn
     a = alpha[t - 1]  # Qx1
@@ -435,13 +425,13 @@ def combine_mfcc(repeats, name, window, f):
 
 
 def learn_initial(alphas, betas):
-    out = [0] * len(alphas)
+    out = [0] * len(alphas[0][0])
     for ell in range(0, len(alphas)):
         currenta = alphas[ell][0]
         currentb = list(betas[ell][0])
-        pi = np.multiply(currenta, currentb)
+        pi = list(np.multiply(currenta, currentb))
         sum = np.sum(pi)
-        out = np.add(out, np.divide(pi, sum))
+        out = list(np.add(out, np.divide(pi, sum)))
     out = np.divide(out, len(alphas))
     return out
 
@@ -547,7 +537,7 @@ sd.default.samplerate = fs
 sd.default.channels = 1
 window = 25
 hamming_window = make_window(25, fs)
-utterances = 1
+utterances = 20
 
 # ===========
 # EM Learning
