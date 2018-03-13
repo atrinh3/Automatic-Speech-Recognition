@@ -82,10 +82,10 @@ def mel_filter(data, banks, nfft):
 def get_vector(array, fs, max):
     # 1) compute FFT- Make FFT length= to next power of 2 above window length
     my_pad = int(np.power(2, 0 + np.ceil(np.log2(len(array)))))
-    out = np.fft.fft(array, my_pad)
+    out = list(np.fft.fft(np.array(array), my_pad))
 
     # 2) take magnitude of FFT (throw away phase)
-    out = abs(out)
+    out = np.absolute(out)
 
     # create mel banks
     min = 0
@@ -98,10 +98,10 @@ def get_vector(array, fs, max):
     tmp = out[0:int(tmp)]
 
     # 5) take IDFT / DCT
-    out = np.fft.irfft(mel_filter(tmp, mels, my_pad / 2))
-
+    out = mel_filter(tmp, mels, my_pad/2)
+    # out = np.fft.irfft(out)
     # 6) retain first 13 coefficients
-    return out[0:max + 1]
+    return out[0:max+1]
 
 
 def produce_mfcc(signal, window, fs, fr, max):
@@ -120,8 +120,10 @@ def produce_mfcc(signal, window, fs, fr, max):
         start = int(i)
         end = int(i + window_length)
         tmp = signal[start:end]
-        tmp = np.multiply(tmp, window)
-        mfcc.append(get_vector(tmp, fs, max))
+        input = []
+        for j in range(0, len(tmp)):
+            input.append(tmp[j] * window[j])
+        mfcc.append(get_vector(input, fs, max))
         i += shift
         count += 1
     return mfcc
@@ -199,8 +201,10 @@ def prob_evidence(alpha):
     #     sum += currenta[q] * currentb[q]
     # return result
     tmp = alpha[len(alpha) - 1]
-    tmp = np.divide(tmp, tmp)
-    return tmp
+    sum = 0
+    for i in range(0, len(tmp)):
+        sum += tmp[i]
+    return sum
 
 
 # Equation from lecture 9, F58/77 & hw5.pdf equation (21)
@@ -260,6 +264,33 @@ def get_covariance(mfcc, mean):
     return covariance
 
 
+# def get_alphas(passed_mean, passed_covariance, passed_trans, passed_mfcc, states, t):
+#     if t < 1:
+#         # Reached beginning of the HMM.  Need to end the recursion
+#         # At the first time step, the algorithm will initialize to
+#         # the first state meaning q1 = 1 and all other q's = 0.
+#         alpha_initial = [0] * len(passed_trans[0])
+#         alpha_initial[0] = 1
+#         return [alpha_initial]
+#     last_alpha = get_alphas(passed_mean,
+#                             passed_covariance,
+#                             passed_trans,
+#                             passed_mfcc,
+#                             states,
+#                             t - 1)
+#     current_alpha = []
+#     for q in range(0, states):
+#         sum = 0
+#         for r in range(0, states):
+#             # q = TO state, r = FROM state
+#             transition_probability = passed_trans[r][q]
+#             sum += transition_probability * last_alpha[t - 1][r]
+#         observation = prob_observation_v2(passed_mean,
+#                                           passed_covariance,
+#                                           passed_mfcc[t - 1])
+#         current_alpha.append(observation[i] * sum)
+#     last_alpha.append(current_alpha)
+#     return last_alpha
 def get_alphas(passed_mean, passed_covariance, passed_trans, passed_mfcc, states, t):
     if t < 1:
         # Reached beginning of the HMM.  Need to end the recursion
@@ -285,37 +316,13 @@ def get_alphas(passed_mean, passed_covariance, passed_trans, passed_mfcc, states
                                           passed_covariance,
                                           passed_mfcc[t - 1])
         current_alpha.append(observation[i] * sum)
-    last_alpha.append(current_alpha)
+    sum = 0
+    for q in range(0, states):
+        sum += current_alpha[q]
+    final_out = list(np.divide(current_alpha, sum))
+    # last_alpha.append(current_alpha)
+    last_alpha.append(final_out)
     return last_alpha
-# def get_alphas(passed_mean, passed_covariance, passed_trans, passed_mfcc, states, t):
-#     if t < 1:
-#         # Reached beginning of the HMM.  Need to end the recursion
-#         # At the first time step, the algorithm will initialize to
-#         # the first state meaning q1 = 1 and all other q's = 0.
-#         alpha_initial = [0] * len(passed_trans[0])
-#         alpha_initial[0] = 1
-#         return [alpha_initial]
-#     last_alpha = get_alphas(passed_mean,
-#                             passed_covariance,
-#                             passed_trans,
-#                             passed_mfcc,
-#                             states,
-#                             t - 1)
-#     current_alpha = []
-#     for q in range(0, states):
-#         sum = 0
-#         for r in range(0, states):
-#         # q = TO state, r = FROM state
-#             transition_probability = passed_trans[r][q]
-#             sum += transition_probability * last_alpha[t - 1][r]
-#         observation = prob_observation_v2(passed_mean,
-#                                           passed_covariance,
-#                                           passed_mfcc[t - 1])
-#         tmp = math.log10(observation[q])
-#         tmp += math.log10(sum)
-#         current_alpha.append(tmp)
-#     last_alpha.append(current_alpha)
-#     return last_alpha
 
 
 # Equation from lecture 9, F14/77
@@ -336,7 +343,11 @@ def get_betas(passed_covar, passed_trans, passed_mfcc, states, t):
             transition_probability = passed_trans[i][j]
             sum += passed_covar[j] * transition_probability * next_beta[0][j]
         current_beta.append(sum)
-    current_beta = [current_beta]
+    sum = 0
+    for q in range(0, states):
+        sum += current_beta[q]
+    final_out = list(np.divide(current_beta, sum))
+    current_beta = [final_out]
     current_beta.extend(next_beta)
     return current_beta
 
@@ -349,13 +360,14 @@ def get_betas(passed_covar, passed_trans, passed_mfcc, states, t):
 def get_gamma(alpha, beta, num_states, t):
     a = alpha[t]
     b = beta[t]
-    gamma = []
+    gamma = [0] * num_states
     sum = 0
     for i in range(0, num_states):
         sum += a[i] * b[i]
     for i in range(0, num_states):
-        tmp = a[i] * b[i] / sum
-        gamma.append(tmp)
+        tmp = a[i] * b[i]
+        tmp = tmp / sum
+        gamma[i] = tmp
     return gamma
 
 
@@ -371,7 +383,8 @@ def get_gamma(alpha, beta, num_states, t):
 # t:           Time step in the MFCC
 def get_xi(alpha, beta, transition, covariance, mfcc, means, states, t):
     # observation
-    mfcc_v = mfcc[t - 1]
+    # mfcc_v = mfcc[t - 1]
+    mfcc_v = mfcc[t]
     p_o = prob_observation_v2(means, covariance, mfcc_v)  # 1xn
     a = alpha[t - 1]  # Qx1
     b = beta[t]  # Qx1
@@ -381,6 +394,7 @@ def get_xi(alpha, beta, transition, covariance, mfcc, means, states, t):
         tmpa = a[i]
         tmpb = b[i]
         xi_vector = []
+
         for j in range(0, states):
             p_transition = transition[i][j]
             xi_vector.append((p_o[i] * p_transition * tmpa * tmpb) / e)
@@ -413,10 +427,8 @@ def get_mfcc(waveform, hamming, fs):
 
 def combine_mfcc(repeats, name, window, f):
     mfcc = []
-    repeats = 1
     for i in range(0, repeats):
-        # filename = name + "_%i.wav" % i
-        filename = name + "_1.wav"
+        filename = name + "_%i.wav" % (i + 1)
         data = wv.read(filename)[1]
         mfcc.extend(get_mfcc(data, window, f))
     return mfcc
@@ -446,7 +458,7 @@ def learn_transition(alphas, betas, mfccs, states,
         current_mfcc = list(mfccs[ell])
         sumg = [0] * states
         sumx = [[0] * states] * states
-        for t in range(1, len(alphas[0])):
+        for t in range(1, len(alphas[0])-1):
             currentg = get_gamma(
                 alphas[ell],
                 betas[ell],
@@ -463,8 +475,8 @@ def learn_transition(alphas, betas, mfccs, states,
                 t)
             for q in range(0, states):
                 sumg[q] += currentg[q]
-                for q2 in range(0, states):
-                    sumx[q][q2] += currentx[q][q2]
+                xi_v = currentx[q]
+                sumx[q] = list(np.add(sumx[q], xi_v))
         sum_transition += np.divide(sumx, sumg)
     return sum_transition / len(alphas)
 
@@ -477,18 +489,22 @@ def learn_transition(alphas, betas, mfccs, states,
 def learn_means(alphas, betas, states, mfccs):
     mfcc_coeffs = len(mfccs[0][0])
     sum_num = [[0] * mfcc_coeffs] * states
-    sum_den = [[0] * mfcc_coeffs] * states
+    sum_den = [0] * states
     for ell in range(0, len(alphas)):
         a = alphas[ell]
         b = betas[ell]
         mfcc = mfccs[ell]
         for t in range(0, len(mfcc)):
             gamma_t = get_gamma(a, b, states, t)
-            sum_den = np.add(sum_den, gamma_t)
+            x_t = mfcc[t]
             for q in range(0, states):
-                sum_num[q] = np.add(sum_num[q], np.multiply(mfcc[t], gamma_t[q]))
-    out = np.divide(sum_num, sum_den)
-    return out
+                state_gamma = gamma_t[q]
+                sum_den[q] += state_gamma
+                num = list(np.multiply(x_t, state_gamma))
+                sum_num[q] = list(np.add(sum_num[q], num))
+    for q in range(0, states):
+        sum_num[q] = list(np.divide(sum_num[q], sum_den[q]))
+    return sum_num
 
 
 # Equation 9.70 from lecture 9, F60/77
@@ -500,9 +516,10 @@ def learn_means(alphas, betas, states, mfccs):
 # Should end up with a 3D matrix of size N x N x Q
 # i.e. Each state should have an N x N covariance matrix
 # But since result will be a diagonal matrix, can be 1 x N
+# This means the result will be an N x Q matrix.
 def learn_covariances(alphas, betas, mfccs, states, learned_mean):
-    sum_num = [0] * len(learned_mean[0])
-    sum_den = [0] * len(learned_mean[0])
+    sum_num = [[0] * len(learned_mean[0])] * states
+    sum_den = [0] * states
     for ell in range(0, len(alphas)):
         mfcc = mfccs[ell]
         a = alphas[ell]
@@ -510,13 +527,16 @@ def learn_covariances(alphas, betas, mfccs, states, learned_mean):
         for t in range(0, len(mfcc)):
             gamma_t = get_gamma(a, b, states, t)
             x_t = mfcc[t]
-            sum_den = np.add(sum_den, gamma_t)
             for q in range(0, states):
-                mean_q = learned_mean[q]
-                tmp = gamma_t[q] * (x_t - mean_q) ** 2
-                sum_num = np.add(sum_num, tmp)
-    out = np.divide(sum_num, sum_den)
-    return out
+                sum_den[q] += gamma_t[q]
+                state_mean = learned_mean[q]
+                diff = np.subtract(x_t, state_mean)
+                var = np.power(diff, 2)
+                num = list(np.multiply(var, gamma_t[q]))
+                sum_num[q] = list(np.add(sum_num[q], num))
+    for q in range(0, states):
+        sum_num[q] = list(np.divide(sum_num[q], sum_den[q]))
+    return sum_num
 
 
 # =============#
