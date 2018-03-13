@@ -448,7 +448,7 @@ def learn_transition(alphas, betas, mfccs, states,
         current_mfcc = list(mfccs[ell])
         sumg = [0] * states
         sumx = [[0] * states] * states
-        for t in range(1, len(alphas[0])-1):
+        for t in range(1, len(alphas[ell])-1):
             currentg = get_gamma(
                 alphas[ell],
                 betas[ell],
@@ -468,7 +468,13 @@ def learn_transition(alphas, betas, mfccs, states,
                 xi_v = currentx[q]
                 sumx[q] = list(np.add(sumx[q], xi_v))
         sum_transition += np.divide(sumx, sumg)
-    return sum_transition / len(alphas)
+    sum_transition = np.divide(sum_transition, len(alphas))
+    for i in range(0, states):
+        sum = 0
+        for j in range(0, states):
+            sum += sum_transition[i][j]
+        sum_transition[i] = np.divide(sum_transition[i], sum)
+    return sum_transition
 
 
 # Equation 9.69 from Lecutre 9, F60/77
@@ -531,7 +537,7 @@ def learn_covariances(alphas, betas, mfccs, states, learned_mean):
 
 # =============#
 #     START    #
-# -------------#
+# =============#
 fs = 16000
 sd.default.samplerate = fs
 sd.default.channels = 1
@@ -539,52 +545,52 @@ window = 25
 hamming_window = make_window(25, fs)
 utterances = 20
 
-# ===========
+# -----------
 # EM Learning
-# ===========
+# -----------
+odessa_states = 10
+lights_on_states = 20
+lights_off_states = 20
+play_music_states = 20
+stop_music_states = 20
+time_states = 20
 # Concatenating all MFCCs from ALL utterances of everything
-global_mfcc = combine_mfcc(utterances, "Odessa", hamming_window, fs)
-global_mfcc.extend(combine_mfcc(utterances, "LightsOn", hamming_window, fs))
-global_mfcc.extend(combine_mfcc(utterances, "LightsOff", hamming_window, fs))
-global_mfcc.extend(combine_mfcc(utterances, "PlayMusic", hamming_window, fs))
-global_mfcc.extend(combine_mfcc(utterances, "StopMusic", hamming_window, fs))
-global_mfcc.extend(combine_mfcc(utterances, "Time", hamming_window, fs))
+global_mfcc = combine_mfcc(utterances, "new_Odessa", hamming_window, fs)
+global_mfcc.extend(combine_mfcc(utterances, "new_LightsOn", hamming_window,fs))
+global_mfcc.extend(combine_mfcc(utterances, "new_LightsOff",hamming_window,fs))
+global_mfcc.extend(combine_mfcc(utterances, "new_PlayMusic",hamming_window,fs))
+global_mfcc.extend(combine_mfcc(utterances, "new_StopMusic",hamming_window,fs))
+global_mfcc.extend(combine_mfcc(utterances, "new_Time", hamming_window, fs))
 
 global_mean = get_mean(global_mfcc, 1)
 global_covariance = get_covariance(global_mfcc, global_mean)
 
+# ***************
 # Odessa Training
-odessa_states = 10
+# ***************
 odessa_training_means = get_mean(global_mfcc, odessa_states)
 odessa_alphas = [None] * utterances
 odessa_betas = [None] * utterances
 odessa_transition_guess = get_transition(odessa_states)
 odessa_training_mfccs = []
 for i in range(1, utterances + 1):
-    filename = "Odessa_%i.wav" % i
+    filename = "new_Odessa_%i.wav" % i
     data = wv.read(filename)[1]
     odessa_training_mfccs.append(get_mfcc(data, hamming_window, fs))
-
 for i in range(0, utterances):
-    filename = "Odessa_%i.wav" % (i + 1)
-    data = wv.read(filename)[1]
-    tmp = get_mfcc(data, hamming_window, fs)
     odessa_alphas[i] = get_alphas(
         odessa_training_means,
         global_covariance,
         odessa_transition_guess,
-        tmp,
+        odessa_training_mfccs[i],
         odessa_states,
-        len(tmp))
-    # print(odessa_alphas[0])
+        len(odessa_training_mfccs[i]))
     odessa_betas[i] = get_betas(
         global_covariance,
         odessa_transition_guess,
-        tmp,
+        odessa_training_mfccs[i],
         odessa_states,
         0)
-    # print(odessa_betas[0])
-
 odessa_initial_em = learn_initial(
     odessa_alphas,
     odessa_betas)
@@ -608,7 +614,257 @@ odessa_covariance_em = learn_covariances(
     odessa_states,
     odessa_means_em)
 
-print(odessa_initial_em)
+
+# ******************
+# Lights On Training
+# ******************
+lights_on_training_means = get_mean(global_mfcc, lights_on_states)
+lights_on_alphas = [None] * utterances
+lights_on_betas = [None] * utterances
+lights_on_transition_guess = get_transition(lights_on_states)
+lights_on_training_mfccs = []
+for i in range(1, utterances + 1):
+    filename = "new_LightsOn_%i.wav" % i
+    data = wv.read(filename)[1]
+    lights_on_training_mfccs.append(get_mfcc(data, hamming_window, fs))
+for i in range(0, utterances):
+    lights_on_alphas[i] = get_alphas(
+        lights_on_training_means,
+        global_covariance,
+        lights_on_transition_guess,
+        lights_on_training_mfccs[i],
+        lights_on_states,
+        len(lights_on_training_mfccs[i]))
+    lights_on_betas[i] = get_betas(
+        global_covariance,
+        lights_on_transition_guess,
+        lights_on_training_mfccs[i],
+        lights_on_states,
+        0)
+lights_on_initial_em = learn_initial(
+    lights_on_alphas,
+    lights_on_betas)
+lights_on_transition_em = learn_transition(
+    lights_on_alphas,
+    lights_on_betas,
+    lights_on_training_mfccs,
+    lights_on_states,
+    lights_on_training_means,
+    lights_on_transition_guess,
+    global_covariance)
+lights_on_means_em = learn_means(
+    lights_on_alphas,
+    lights_on_betas,
+    lights_on_states,
+    lights_on_training_mfccs)
+lights_on_covariance_em = learn_covariances(
+    lights_on_alphas,
+    lights_on_betas,
+    lights_on_training_mfccs,
+    lights_on_states,
+    lights_on_means_em)
+
+
+# *******************
+# Lights Off Training
+# *******************
+lights_off_training_means = get_mean(global_mfcc, lights_off_states)
+lights_off_alphas = [None] * utterances
+lights_off_betas = [None] * utterances
+lights_off_transition_guess = get_transition(lights_off_states)
+lights_off_training_mfccs = []
+for i in range(1, utterances + 1):
+    filename = "new_LightsOff_%i.wav" % i
+    data = wv.read(filename)[1]
+    lights_off_training_mfccs.append(get_mfcc(data, hamming_window, fs))
+for i in range(0, utterances):
+    lights_off_alphas[i] = get_alphas(
+        lights_off_training_means,
+        global_covariance,
+        lights_off_transition_guess,
+        lights_off_training_mfccs[i],
+        lights_off_states,
+        len(lights_off_training_mfccs[i]))
+    lights_off_betas[i] = get_betas(
+        global_covariance,
+        lights_off_transition_guess,
+        lights_off_training_mfccs[i],
+        lights_off_states,
+        0)
+lights_off_initial_em = learn_initial(
+    lights_off_alphas,
+    lights_off_betas)
+lights_off_transition_em = learn_transition(
+    lights_off_alphas,
+    lights_off_betas,
+    lights_off_training_mfccs,
+    lights_off_states,
+    lights_off_training_means,
+    lights_off_transition_guess,
+    global_covariance)
+lights_off_means_em = learn_means(
+    lights_off_alphas,
+    lights_off_betas,
+    lights_off_states,
+    lights_off_training_mfccs)
+lights_off_covariance_em = learn_covariances(
+    lights_off_alphas,
+    lights_off_betas,
+    lights_off_training_mfccs,
+    lights_off_states,
+    lights_off_means_em)
+
+
+# *******************
+# Play Music Training
+# *******************
+play_music_training_means = get_mean(global_mfcc, play_music_states)
+play_music_alphas = [None] * utterances
+play_music_betas = [None] * utterances
+play_music_transition_guess = get_transition(play_music_states)
+play_music_training_mfccs = []
+for i in range(1, utterances + 1):
+    filename = "new_PlayMusic_%i.wav" % i
+    data = wv.read(filename)[1]
+    play_music_training_mfccs.append(get_mfcc(data, hamming_window, fs))
+for i in range(0, utterances):
+    play_music_alphas[i] = get_alphas(
+        play_music_training_means,
+        global_covariance,
+        play_music_transition_guess,
+        play_music_training_mfccs[i],
+        play_music_states,
+        len(play_music_training_mfccs[i]))
+    play_music_betas[i] = get_betas(
+        global_covariance,
+        play_music_transition_guess,
+        play_music_training_mfccs[i],
+        play_music_states,
+        0)
+play_music_initial_em = learn_initial(
+    play_music_alphas,
+    play_music_betas)
+play_music_transition_em = learn_transition(
+    play_music_alphas,
+    play_music_betas,
+    play_music_training_mfccs,
+    play_music_states,
+    play_music_training_means,
+    play_music_transition_guess,
+    global_covariance)
+play_music_means_em = learn_means(
+    play_music_alphas,
+    play_music_betas,
+    play_music_states,
+    play_music_training_mfccs)
+play_music_covariance_em = learn_covariances(
+    play_music_alphas,
+    play_music_betas,
+    play_music_training_mfccs,
+    play_music_states,
+    play_music_means_em)
+
+
+# *******************
+# Stop Music Training
+# *******************
+stop_music_training_means = get_mean(global_mfcc, stop_music_states)
+stop_music_alphas = [None] * utterances
+stop_music_betas = [None] * utterances
+stop_music_transition_guess = get_transition(stop_music_states)
+stop_music_training_mfccs = []
+for i in range(1, utterances + 1):
+    filename = "new_StopMusic_%i.wav" % i
+    data = wv.read(filename)[1]
+    stop_music_training_mfccs.append(get_mfcc(data, hamming_window, fs))
+for i in range(0, utterances):
+    stop_music_alphas[i] = get_alphas(
+        stop_music_training_means,
+        global_covariance,
+        stop_music_transition_guess,
+        stop_music_training_mfccs[i],
+        stop_music_states,
+        len(stop_music_training_mfccs[i]))
+    stop_music_betas[i] = get_betas(
+        global_covariance,
+        stop_music_transition_guess,
+        stop_music_training_mfccs[i],
+        stop_music_states,
+        0)
+stop_music_initial_em = learn_initial(
+    stop_music_alphas,
+    stop_music_betas)
+stop_music_transition_em = learn_transition(
+    stop_music_alphas,
+    stop_music_betas,
+    stop_music_training_mfccs,
+    stop_music_states,
+    stop_music_training_means,
+    stop_music_transition_guess,
+    global_covariance)
+stop_music_means_em = learn_means(
+    stop_music_alphas,
+    stop_music_betas,
+    stop_music_states,
+    stop_music_training_mfccs)
+stop_music_covariance_em = learn_covariances(
+    stop_music_alphas,
+    stop_music_betas,
+    stop_music_training_mfccs,
+    stop_music_states,
+    stop_music_means_em)
+
+
+# ************************
+# What Time is it Training
+# ************************
+time_training_means = get_mean(global_mfcc, time_states)
+time_alphas = [None] * utterances
+time_betas = [None] * utterances
+time_transition_guess = get_transition(time_states)
+time_training_mfccs = []
+for i in range(1, utterances + 1):
+    filename = "new_Time_%i.wav" % i
+    data = wv.read(filename)[1]
+    time_training_mfccs.append(get_mfcc(data, hamming_window, fs))
+for i in range(0, utterances):
+    time_alphas[i] = get_alphas(
+        time_training_means,
+        global_covariance,
+        time_transition_guess,
+        time_training_mfccs[i],
+        time_states,
+        len(time_training_mfccs[i]))
+    time_betas[i] = get_betas(
+        global_covariance,
+        time_transition_guess,
+        time_training_mfccs[i],
+        time_states,
+        0)
+time_initial_em = learn_initial(
+    time_alphas,
+    time_betas)
+time_transition_em = learn_transition(
+    time_alphas,
+    time_betas,
+    time_training_mfccs,
+    time_states,
+    time_training_means,
+    time_transition_guess,
+    global_covariance)
+time_means_em = learn_means(
+    time_alphas,
+    time_betas,
+    time_states,
+    time_training_mfccs)
+time_covariance_em = learn_covariances(
+    time_alphas,
+    time_betas,
+    time_training_mfccs,
+    time_states,
+    time_means_em)
+
+print("done")
 
 # Write code for the data structures & algorithms of the HMMs
 
