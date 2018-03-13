@@ -198,7 +198,7 @@ def get_vector(array, fs, max):
 
     # 5) take IDFT / DCT
     out = mel_filter(tmp, mels, my_pad/2)
-    # out = np.fft.irfft(out)
+    out = np.fft.irfft(out)
     # 6) retain first 13 coefficients
     return out[0:max+1]
 
@@ -386,7 +386,7 @@ def get_alphas(passed_mean, passed_covariance, passed_trans, passed_mfcc, states
         sum += current_alpha[q]
     final_out = list(np.divide(current_alpha, sum))
     last_alpha.append(final_out)
-    last_alpha.append(current_alpha)
+    # last_alpha.append(current_alpha)
     return last_alpha
 
 
@@ -541,7 +541,17 @@ def learn_transition(alphas, betas, mfccs, states,
                 xi_v = currentx[q]
                 sumx[q] = list(np.add(sumx[q], xi_v))
         sum_transition += np.divide(sumx, sumg)
-    return sum_transition / len(alphas)
+    final_transition = sum_transition / len(alphas)
+    for i in range(0, states):
+        sum = 0
+        for j in range(0, states):
+            test2 = final_transition[i]
+            test3 = final_transition[i][j]
+            sum += final_transition[i][j]
+        for j in range(0, states):
+            final_transition[i][j] = final_transition[i][j] / sum
+    # return sum_transition / len(alphas)
+    return final_transition
 
 
 # Equation 9.69 from Lecutre 9, F60/77
@@ -558,7 +568,9 @@ def learn_means(alphas, betas, states, mfccs):
         b = betas[ell]
         mfcc = mfccs[ell]
         for t in range(0, len(mfcc)):
-            gamma_t = get_gamma(a, b, states, t)
+            # if t == 184:
+            #     print('debug')
+            gamma_t = get_gamma(a, b, states, t-1)
             x_t = mfcc[t]
             for q in range(0, states):
                 state_gamma = gamma_t[q]
@@ -664,7 +676,7 @@ def perform(data):
     a = get_alphas(time_means_em, time_covariance_em, time_transition_em,
                    input_mfcc, time_states, length)
     action["Time"] = a[len(input_mfcc)][time_states - 1]
-    action["I don't know"] = .01
+    action["I don't know"] = .1
     out = max(action)
     if out == "Lights on":
         lights_on()
@@ -703,7 +715,7 @@ sd.default.samplerate = fs
 sd.default.channels = 1
 window = 25
 hamming_window = make_window(25, fs)
-utterances = 2
+utterances = 5
 
 # ===========
 # EM Learning
@@ -1041,4 +1053,3 @@ wavfile = sf.SoundFile(filename,
 print('streaming audio now...')
 with sd.InputStream(callback=callback, blocksize=chunk):
     sd.sleep(int(duration * 1000))
-    
