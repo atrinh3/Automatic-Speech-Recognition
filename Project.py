@@ -1,17 +1,116 @@
 # import matplotlib.pyplot as plt
 import scipy.io.wavfile as wv
 import sounddevice as sd
+import soundfile as sf
 import numpy as np
 import math
+import time as t
 
 
-# L T Q
-# log likelihood is alpha matrix summed at the last t = T
-# p(x[1:T]|w) is the last column of the alpha matrix
-# each state gaussian should be represented by a mean and a covariance
+def get_sign(data):
+    if data >= 0:
+        return 1
+    return -1
 
-# ========================================================================
-# ========================================================================
+
+def find_zeros(data):
+    sum = 0
+    for i in range(1, len(data)):
+        a = get_sign(data[i])
+        b = get_sign(data[i - 1])
+        sum += int(abs(a - b) / 2)
+    return sum
+
+
+def get_energy(data, window):
+    e = []
+    i = 0
+    while i + window <= len(data):
+        sum = 0
+        for j in range(0, int(window)):
+            sum += abs(data[int(i + j)])
+        e.append(sum)
+        i += window
+    return e
+
+
+def listen(data, energy, lower, upper, frames, width, zt):
+    length = len(energy)
+    tmp = None
+    for i in range(0, length):
+        if energy[i] < lower:
+            tmp = None
+        if energy[i] >= lower:
+            tmp = i
+        if energy[i] >= upper:
+            valid = zero_check(data, tmp, frames, width, zt)
+            if valid is not None:
+                return True
+    return False
+
+
+def zero_check(data, N1, frames, width, zt):
+    count = 0
+    least = N1 * width
+    for i in range(1, frames):
+        id = N1 * width - i * width
+        start = int(id)
+        end = int(start + width)
+        # print('index %i' % i)
+        # print("start %i, to end %i" % (start, end))
+        if find_zeros(data[start:end]) >= math.floor(zt):
+            count += 1
+            if id < least:
+                least = id
+    if count >= 3:
+        return int(least / width)
+    return None
+
+
+def detect_voice(signal):
+    # Rabiner/Sambur Algorithm
+    fs = 16000
+    window = 10  # in ms
+    assumed_silence = 100  # assume first 100ms is always silent
+    itl = 8081
+    # itu = 40407
+    itu = 30000
+
+    sample = fs * window / 1000
+    energy = get_energy(signal, sample)
+
+    # 2) Compute IMX and IMN.
+    imn = energy[0]
+    imx = imn
+    for i in range(0, len(energy)):
+        if energy[i] < imn:
+            imn = energy[i]
+        elif energy[i] > imx:
+            imx = energy[i]
+
+    # 3) Set ITL and ITU
+    itl = min(0.03 * (imx - imn) + imn, 4 * imn)
+    # itl = 0.03 * (imx - imn) + imn
+    itu = 5 * itl
+
+    # 4) Find mean and std for zero crossings
+    zc_control = 25
+    zc_array = []
+    for i in range(0, int(assumed_silence / window)):
+        start = int(i * sample)
+        end = int(start + sample)
+        zc_array.append(find_zeros(signal[start:end]))
+    zc_mean = float(np.mean(zc_array))
+    std = 0
+    for i in zc_array:
+        std += (i - zc_mean) * (i - zc_mean)
+    std = std / len(zc_array)
+    std = math.sqrt(std)
+    izct = min([zc_control, zc_mean + 2 * std])
+
+    # 5 & 6) Find N1 & N'
+    intervals = 25  # frames
+    return listen(signal, energy, itl, itu, intervals, sample, izct)
 
 
 # The "make_window" function takes a window width parameter and returns
@@ -202,21 +301,23 @@ def prob_evidence(alpha):
 # mean:        1 x N x Q Mean matrix that has means for each state
 # covariance:  1xN dim. matrix containing global covariance values
 # mfcc:        Single MFCC vector
-def prob_observation_v2(means, covariance, mfcc):
+def prob_observation_v2(means, covariances, mfcc):
     # mean and covariance describes the state
     length = len(means[0])
-    product = 1
-    for i in range(0, length):
-        product = product * covariance[i]
-    left = 1 / (((2 * np.pi) ** (length / 2)) * np.sqrt(product))
+    product = [1] * len(means)
+    for q in range(0, len(means)):
+        for i in range(0, length):
+            product[q] = product[q] * covariances[q][i]
+    left = 1 / ((2 * np.pi) ** (length / 2))
+    left = np.multiply(list(np.sqrt(product)), left)
     output = []
     for q in range(0, len(means)):
         diff = np.subtract(mfcc, means[q])
         diff = np.power(diff, 2)
-        diff = np.divide(diff, covariance)
+        diff = np.divide(diff, covariances[q])
         diff = np.sum(diff)
         right = np.exp(-0.5 * diff)
-        output.append(left * right)
+        output.append(left[q] * right)
     return output
 
 
@@ -255,33 +356,6 @@ def get_covariance(mfcc, mean):
     return covariance
 
 
-# def get_alphas(passed_mean, passed_covariance, passed_trans, passed_mfcc, states, t):
-#     if t < 1:
-#         # Reached beginning of the HMM.  Need to end the recursion
-#         # At the first time step, the algorithm will initialize to
-#         # the first state meaning q1 = 1 and all other q's = 0.
-#         alpha_initial = [0] * len(passed_trans[0])
-#         alpha_initial[0] = 1
-#         return [alpha_initial]
-#     last_alpha = get_alphas(passed_mean,
-#                             passed_covariance,
-#                             passed_trans,
-#                             passed_mfcc,
-#                             states,
-#                             t - 1)
-#     current_alpha = []
-#     for q in range(0, states):
-#         sum = 0
-#         for r in range(0, states):
-#             # q = TO state, r = FROM state
-#             transition_probability = passed_trans[r][q]
-#             sum += transition_probability * last_alpha[t - 1][r]
-#         observation = prob_observation_v2(passed_mean,
-#                                           passed_covariance,
-#                                           passed_mfcc[t - 1])
-#         current_alpha.append(observation[i] * sum)
-#     last_alpha.append(current_alpha)
-#     return last_alpha
 def get_alphas(passed_mean, passed_covariance, passed_trans, passed_mfcc, states, t):
     if t < 1:
         # Reached beginning of the HMM.  Need to end the recursion
@@ -311,8 +385,8 @@ def get_alphas(passed_mean, passed_covariance, passed_trans, passed_mfcc, states
     for q in range(0, states):
         sum += current_alpha[q]
     final_out = list(np.divide(current_alpha, sum))
-    # last_alpha.append(current_alpha)
     last_alpha.append(final_out)
+    last_alpha.append(current_alpha)
     return last_alpha
 
 
@@ -329,10 +403,9 @@ def get_betas(passed_covar, passed_trans, passed_mfcc, states, t):
     for i in range(0, states):
         sum = 0
         for j in range(0, states):
-            # i = FROM state, j
-            # = TO state
+            # i = FROM state, j = TO state
             transition_probability = passed_trans[i][j]
-            sum += passed_covar[j] * transition_probability * next_beta[0][j]
+            sum += passed_covar[0][j] * transition_probability * next_beta[0][j]
         current_beta.append(sum)
     sum = 0
     for q in range(0, states):
@@ -448,7 +521,7 @@ def learn_transition(alphas, betas, mfccs, states,
         current_mfcc = list(mfccs[ell])
         sumg = [0] * states
         sumx = [[0] * states] * states
-        for t in range(1, len(alphas[ell])-1):
+        for t in range(1, len(current_mfcc)-1):
             currentg = get_gamma(
                 alphas[ell],
                 betas[ell],
@@ -468,13 +541,7 @@ def learn_transition(alphas, betas, mfccs, states,
                 xi_v = currentx[q]
                 sumx[q] = list(np.add(sumx[q], xi_v))
         sum_transition += np.divide(sumx, sumg)
-    sum_transition = np.divide(sum_transition, len(alphas))
-    for i in range(0, states):
-        sum = 0
-        for j in range(0, states):
-            sum += sum_transition[i][j]
-        sum_transition[i] = np.divide(sum_transition[i], sum)
-    return sum_transition
+    return sum_transition / len(alphas)
 
 
 # Equation 9.69 from Lecutre 9, F60/77
@@ -496,8 +563,8 @@ def learn_means(alphas, betas, states, mfccs):
             for q in range(0, states):
                 state_gamma = gamma_t[q]
                 sum_den[q] += state_gamma
-                num = list(np.multiply(x_t, state_gamma))
-                sum_num[q] = list(np.add(sum_num[q], num))
+                num = np.multiply(x_t, state_gamma)
+                sum_num[q] = np.add(sum_num[q], num)
     for q in range(0, states):
         sum_num[q] = list(np.divide(sum_num[q], sum_den[q]))
     return sum_num
@@ -535,19 +602,112 @@ def learn_covariances(alphas, betas, mfccs, states, learned_mean):
     return sum_num
 
 
+def check_odessa(states, means, covars, trans, init, input):
+    wind = make_window(25, 16000)
+    input_mfcc = get_mfcc(input, wind, 16000)
+    a = get_alphas(means, covars, trans, input, states, len(input_mfcc))
+    print(a)
+    result = np.log(a[len(input_mfcc)][states - 1])
+    print(result)
+    if result > .01:
+        print("Hello, I'm Odessa, how can I help you?")
+        return True
+    # return False
+    return  True
+
+
+def lights_on():
+    print("I'm turning on the lights")
+
+
+def lights_off():
+    print("I'm turning off the lights")
+
+
+def play_music():
+    print("Playing some music")
+
+
+def stop_music():
+    print("Turning off the music")
+
+
+def what_time():
+    print("The time is xx:xx")
+
+
+def idk():
+    print("I don't know what you said")
+
+
+def perform(data):
+    wind = make_window(25, 16000)
+    input_mfcc = get_mfcc(data, wind, 16000)
+    length = len(input_mfcc)
+    action = {}
+    a = get_alphas(lights_on_means_em, lights_on_covariance_em,
+                   lights_on_transition_em, input_mfcc,
+                   lights_on_states, length)
+    action["Lights on"] = a[len(input_mfcc)][lights_on_states - 1]
+    a = get_alphas(lights_off_means_em, lights_off_covariance_em,
+                   lights_off_transition_em, input_mfcc,
+                   lights_off_states, length)
+    action["Lights off"] = a[len(input_mfcc)][lights_off_states - 1]
+    a = get_alphas(play_music_means_em, play_music_covariance_em,
+                   play_music_transition_em, input_mfcc,
+                   play_music_states, length)
+    action["Play music"] = a[len(input_mfcc)][play_music_states - 1]
+    a = get_alphas(stop_music_means_em, stop_music_covariance_em,
+                   stop_music_transition_em, input_mfcc,
+                   stop_music_states, length)
+    action["Stop music"] = a[len(input_mfcc)][stop_music_states - 1]
+    a = get_alphas(time_means_em, time_covariance_em, time_transition_em,
+                   input_mfcc, time_states, length)
+    action["Time"] = a[len(input_mfcc)][time_states - 1]
+    action["I don't know"] = .01
+    out = max(action)
+    if out == "Lights on":
+        lights_on()
+    elif out == "Lights off":
+        lights_off()
+    elif out == "Play music":
+        play_music()
+    elif out == "Stop music":
+        stop_music()
+    elif out == "Time":
+        what_time()
+    else:
+        idk()
+
+
+def callback(indata, frames, time, status):
+    """This is called (from a separate thread) for each audio block."""
+    if detect_voice(indata):
+        print('Listening for "Odessa"')
+        d, f = sf.read('Stream.wav')
+        data = d[len(d) - 2*frames : len(d)]
+        if(check_odessa(odessa_states, odessa_means_em, odessa_covariance_em,
+                        odessa_transition_em, odessa_initial_em, data)):
+            t.sleep(5)
+            new_d, f = sf.read('Stream.wav')
+            data = new_d[len(new_d) - 10*frames : len(new_d)]
+            perform(data)
+    wavfile.write(indata)
+
+
 # =============#
 #     START    #
-# =============#
+# -------------#
 fs = 16000
 sd.default.samplerate = fs
 sd.default.channels = 1
 window = 25
 hamming_window = make_window(25, fs)
-utterances = 20
+utterances = 2
 
-# -----------
+# ===========
 # EM Learning
-# -----------
+# ===========
 odessa_states = 10
 lights_on_states = 20
 lights_off_states = 20
@@ -556,10 +716,10 @@ stop_music_states = 20
 time_states = 20
 # Concatenating all MFCCs from ALL utterances of everything
 global_mfcc = combine_mfcc(utterances, "new_Odessa", hamming_window, fs)
-global_mfcc.extend(combine_mfcc(utterances, "new_LightsOn", hamming_window,fs))
-global_mfcc.extend(combine_mfcc(utterances, "new_LightsOff",hamming_window,fs))
-global_mfcc.extend(combine_mfcc(utterances, "new_PlayMusic",hamming_window,fs))
-global_mfcc.extend(combine_mfcc(utterances, "new_StopMusic",hamming_window,fs))
+global_mfcc.extend(combine_mfcc(utterances, "new_LightsOn", hamming_window, fs))
+global_mfcc.extend(combine_mfcc(utterances, "new_LightsOff", hamming_window, fs))
+global_mfcc.extend(combine_mfcc(utterances, "new_PlayMusic", hamming_window, fs))
+global_mfcc.extend(combine_mfcc(utterances, "new_StopMusic", hamming_window, fs))
 global_mfcc.extend(combine_mfcc(utterances, "new_Time", hamming_window, fs))
 
 global_mean = get_mean(global_mfcc, 1)
@@ -580,13 +740,13 @@ for i in range(1, utterances + 1):
 for i in range(0, utterances):
     odessa_alphas[i] = get_alphas(
         odessa_training_means,
-        global_covariance,
+        [global_covariance] * odessa_states,
         odessa_transition_guess,
         odessa_training_mfccs[i],
         odessa_states,
         len(odessa_training_mfccs[i]))
     odessa_betas[i] = get_betas(
-        global_covariance,
+        [global_covariance] * odessa_states,
         odessa_transition_guess,
         odessa_training_mfccs[i],
         odessa_states,
@@ -601,7 +761,7 @@ odessa_transition_em = learn_transition(
     odessa_states,
     odessa_training_means,
     odessa_transition_guess,
-    global_covariance)
+    [global_covariance] * odessa_states)
 odessa_means_em = learn_means(
     odessa_alphas,
     odessa_betas,
@@ -630,13 +790,13 @@ for i in range(1, utterances + 1):
 for i in range(0, utterances):
     lights_on_alphas[i] = get_alphas(
         lights_on_training_means,
-        global_covariance,
+        [global_covariance] * lights_on_states,
         lights_on_transition_guess,
         lights_on_training_mfccs[i],
         lights_on_states,
         len(lights_on_training_mfccs[i]))
     lights_on_betas[i] = get_betas(
-        global_covariance,
+        [global_covariance] * lights_on_states,
         lights_on_transition_guess,
         lights_on_training_mfccs[i],
         lights_on_states,
@@ -651,7 +811,7 @@ lights_on_transition_em = learn_transition(
     lights_on_states,
     lights_on_training_means,
     lights_on_transition_guess,
-    global_covariance)
+    [global_covariance] * lights_on_states)
 lights_on_means_em = learn_means(
     lights_on_alphas,
     lights_on_betas,
@@ -665,9 +825,9 @@ lights_on_covariance_em = learn_covariances(
     lights_on_means_em)
 
 
-# *******************
+# ***************
 # Lights Off Training
-# *******************
+# ***************
 lights_off_training_means = get_mean(global_mfcc, lights_off_states)
 lights_off_alphas = [None] * utterances
 lights_off_betas = [None] * utterances
@@ -680,13 +840,13 @@ for i in range(1, utterances + 1):
 for i in range(0, utterances):
     lights_off_alphas[i] = get_alphas(
         lights_off_training_means,
-        global_covariance,
+        [global_covariance] * lights_off_states,
         lights_off_transition_guess,
         lights_off_training_mfccs[i],
         lights_off_states,
         len(lights_off_training_mfccs[i]))
     lights_off_betas[i] = get_betas(
-        global_covariance,
+        [global_covariance] * lights_off_states,
         lights_off_transition_guess,
         lights_off_training_mfccs[i],
         lights_off_states,
@@ -701,7 +861,7 @@ lights_off_transition_em = learn_transition(
     lights_off_states,
     lights_off_training_means,
     lights_off_transition_guess,
-    global_covariance)
+    [global_covariance] * lights_off_states)
 lights_off_means_em = learn_means(
     lights_off_alphas,
     lights_off_betas,
@@ -715,9 +875,9 @@ lights_off_covariance_em = learn_covariances(
     lights_off_means_em)
 
 
-# *******************
+# ***************
 # Play Music Training
-# *******************
+# ***************
 play_music_training_means = get_mean(global_mfcc, play_music_states)
 play_music_alphas = [None] * utterances
 play_music_betas = [None] * utterances
@@ -730,13 +890,13 @@ for i in range(1, utterances + 1):
 for i in range(0, utterances):
     play_music_alphas[i] = get_alphas(
         play_music_training_means,
-        global_covariance,
+        [global_covariance] * play_music_states,
         play_music_transition_guess,
         play_music_training_mfccs[i],
         play_music_states,
         len(play_music_training_mfccs[i]))
     play_music_betas[i] = get_betas(
-        global_covariance,
+        [global_covariance] * play_music_states,
         play_music_transition_guess,
         play_music_training_mfccs[i],
         play_music_states,
@@ -751,7 +911,7 @@ play_music_transition_em = learn_transition(
     play_music_states,
     play_music_training_means,
     play_music_transition_guess,
-    global_covariance)
+    [global_covariance] * play_music_states)
 play_music_means_em = learn_means(
     play_music_alphas,
     play_music_betas,
@@ -765,9 +925,9 @@ play_music_covariance_em = learn_covariances(
     play_music_means_em)
 
 
-# *******************
+# ***************
 # Stop Music Training
-# *******************
+# ***************
 stop_music_training_means = get_mean(global_mfcc, stop_music_states)
 stop_music_alphas = [None] * utterances
 stop_music_betas = [None] * utterances
@@ -780,13 +940,13 @@ for i in range(1, utterances + 1):
 for i in range(0, utterances):
     stop_music_alphas[i] = get_alphas(
         stop_music_training_means,
-        global_covariance,
+        [global_covariance] * stop_music_states,
         stop_music_transition_guess,
         stop_music_training_mfccs[i],
         stop_music_states,
         len(stop_music_training_mfccs[i]))
     stop_music_betas[i] = get_betas(
-        global_covariance,
+        [global_covariance] * stop_music_states,
         stop_music_transition_guess,
         stop_music_training_mfccs[i],
         stop_music_states,
@@ -801,7 +961,7 @@ stop_music_transition_em = learn_transition(
     stop_music_states,
     stop_music_training_means,
     stop_music_transition_guess,
-    global_covariance)
+    [global_covariance] * stop_music_states)
 stop_music_means_em = learn_means(
     stop_music_alphas,
     stop_music_betas,
@@ -830,13 +990,13 @@ for i in range(1, utterances + 1):
 for i in range(0, utterances):
     time_alphas[i] = get_alphas(
         time_training_means,
-        global_covariance,
+        [global_covariance] * time_states,
         time_transition_guess,
         time_training_mfccs[i],
         time_states,
         len(time_training_mfccs[i]))
     time_betas[i] = get_betas(
-        global_covariance,
+        [global_covariance] * time_states,
         time_transition_guess,
         time_training_mfccs[i],
         time_states,
@@ -851,7 +1011,7 @@ time_transition_em = learn_transition(
     time_states,
     time_training_means,
     time_transition_guess,
-    global_covariance)
+    [global_covariance] * time_states)
 time_means_em = learn_means(
     time_alphas,
     time_betas,
@@ -864,7 +1024,23 @@ time_covariance_em = learn_covariances(
     time_states,
     time_means_em)
 
-print("done")
+
+chunk = 4096
+duration = 600
+channels = 1
+fs = 16000
+filename = "Stream.wav"
+sd.default.samplerate = fs
+sd.default.channels = channels
+
+wavfile = sf.SoundFile(filename,
+                       mode='wb',
+                       samplerate=fs,
+                       channels=channels,
+                       subtype='PCM_16')
+print('streaming audio now...')
+with sd.InputStream(callback=callback, blocksize=chunk):
+    sd.sleep(int(duration * 1000))
 
 # Write code for the data structures & algorithms of the HMMs
 
