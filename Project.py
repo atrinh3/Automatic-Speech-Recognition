@@ -1041,41 +1041,4 @@ wavfile = sf.SoundFile(filename,
 print('streaming audio now...')
 with sd.InputStream(callback=callback, blocksize=chunk):
     sd.sleep(int(duration * 1000))
-
-# Write code for the data structures & algorithms of the HMMs
-
-
-# Write code that computes the alpha recursion.
-# Probably want to store, for each HMM, the entire alpha matrix for each word w.
-
-
-# Write code that computes the beta recursion.
-# Probably want to store for each HMM, the entire beta matrix for each word w.
-
-
-# Create a separate alpha and beta matrix for EACH utterance of each phrase.
-# Use the alpha and beta matrix to compute gamma and epsilon quantities
-
-
-# From either alpha or beta matrix,
-# compute probability of (x1, x2, ...,  xT) given w (p(x1:T)|w)
-
-
-# Write code that computes gamma recursion.  Doesn't need to be stored since
-# it's easily computed from alpha and beta matrices.
-
-
-# Write code that computes epsilon quantity.  Doesn't need to be stored
-# since it's easily computed from alpha and beta matrices.
-
-
-# Collect set of training utterances for each word.
-
-
-# Implement the EM algorithm for HMMs.
-
-
-# Use the trained HMMs computed in previous steps
-
-
-# ASR
+    
