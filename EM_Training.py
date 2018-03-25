@@ -1,5 +1,16 @@
-# Takes a set of alpha matrices for all utterances of a phrase to 
-# calculate the aggregate probability of evidence.  All alpha 
+import AlphaBeta
+import Posteriors as post
+import numpy as np
+
+
+def probability_evidence(alpha):
+    time = len(alpha)
+    states = len(alpha[0])
+    return alpha[time - 1][states - 1]
+    
+    
+# Takes a set of alpha matrices for all utterances of a phrase to
+# calculate the aggregate probability of evidence.  All alpha
 # values are in log form so the multiplication of probabilities
 # is done by simply adding the values together.
 # Requires -
@@ -26,13 +37,13 @@ def get_new_likelihood(utterances, mfccs, transition, mean, covariance, iteratio
     for i in range(0, utterances):
         mfcc = mfccs[i]
         mfcc_len = len(mfcc)
-        a = get_alpha(transition, covariance, states, mean, mfcc, mfcc_len)
+        a = AlphaBeta.get_alpha(transition, covariance, states, mean, mfcc, mfcc_len)
         likelihood += probability_evidence(a)
     return likelihood
-    
+
 
 # This function returns a scalar describing the progress of the
-# training process.  As the training functions iterate through the 
+# training process.  As the training functions iterate through the
 # epochs, a likelihood value is computed.  After each epoch
 # iteration, the likelihood list is passed into this function which
 # returns the difference between the most recent likelihood value
@@ -44,7 +55,8 @@ def likelihood_difference(likelihood):
     latest = likelihood(length - 1)
     previous = likelihood(length - 2)
     return latest - previous
-    
+
+
 # This function trains the initial state parameter.  The function will
 # end if the likelihood difference between epoch iterations is small
 # enough.
@@ -56,8 +68,9 @@ def likelihood_difference(likelihood):
 # covariance_guess:    Fixed covariance matrix
 # transition_guess:    Fixed transition matrix
 # mfccs:               MFCC matrix for all utterances
-def train_intial_state(alphas, betas, initial_guess, mean_guess, 
+def train_intial_state(alphas, betas, initial_guess, mean_guess,
                        covariance_guess, transition_guess, mfccs):
+    threshold = 1
     states = len(initial_guess)
     ell = len(alphas)
     new_initial = initial_guess
@@ -65,16 +78,17 @@ def train_intial_state(alphas, betas, initial_guess, mean_guess,
     for epoch in range(0, ell):
         current_alpha = alphas[epoch]
         current_beta = betas[epoch]
-        g = get_gamma(current_alpha, current_beta, 0)
+        g = post.get_gamma(current_alpha, current_beta, 0)
         current = np.add(new_initial, g)
-        tmp = get_new_likelihood(current, ell, mfccs, transition_guess, mean_guess, covariance_guess, epoch)
+        tmp = get_new_likelihood(ell, mfccs, transition_guess,
+                                 mean_guess, covariance_guess, epoch)
         likelihood.append(tmp)
         improvement = likelihood_difference(likelihood)
         if improvement < threshold:
             final = list(np.divide(current, epoch + 2))
             return final
     new_initial = list(np.divide(new_initial, ell + 1))
-    print("Initial state parameter did not converge after %i iterations." 
+    print("Initial state parameter did not converge after %i iterations."
           % ell)
     return new_initial
 
@@ -94,30 +108,6 @@ def build_transition(gamma, xi):
     return transition
 
 
-# Compares the likelihood values for the new and old transition matrix
-# Requires -
-# new_trans:    The newest obtained transition matrix.
-# old_trans:    The transition matrix obtained from the previous iteration.
-# utterances:   Number of MFCC matrices that will be used in scoring.
-# mfccs:        3-Dimensional matrix containing all the MFCCs.
-# mean:         Fixed mean values.
-# covar:        Fixed covariance values.
-# iteration:    Number of iterations performed so far.
-def compare_transitions(new_trans, old_trans, utterances, mfccs, 
-                        mean, covar, iteration):
-    likelihood_new = 0
-    likelihood_old = 0
-    states = len(new_trans)
-    for i in range(0, utterances):
-        mfcc = mfccs[i]
-        mfcc_len = len(mfcc)
-        old_a = get_alpha(new_trans, covar, states, mean, mfcc, mfcc_len)
-        new_a = get_alpha(old_trans, covar, states, mean, mfcc, mfcc_len)
-        likelihood_new += probability_evidence(new_a)
-        likelihood_old += probability_evidence(old_a)
-    return likeliehood_new - likelihood_old
-
-
 # This function trains the transition matrix values.
 # The process will stop once the likelihood values between iterations
 # reaches a small enough value.
@@ -128,8 +118,9 @@ def compare_transitions(new_trans, old_trans, utterances, mfccs,
 # mean_guess:         Fixed mean values.
 # covariance_guess:   Fixed covariance values.
 # transition_guess:   Matrix to initialize training process.
-def train_transition(alphas, betas, mfccs, mean_guess, covariance_guess, 
+def train_transition(alphas, betas, mfccs, mean_guess, covariance_guess,
                      transition_guess):
+    threshold = 1
     ell = len(alphas)
     transition = transition_guess
     states = len(alphas[0][0])
@@ -142,21 +133,21 @@ def train_transition(alphas, betas, mfccs, mean_guess, covariance_guess,
         alpha = alphas[epoch]
         beta = betas[epoch]
         for t in range(1, mfcc_len):
-            tmp_x = get_xi(alpha, beta, t, transition, mean_guess, 
-                        covariance_guess)
-            tmp_g = get_gamma(alpha, beta, t)
+            tmp_x = post.get_xi(alpha, beta, t, transition, mean_guess,
+                           covariance_guess)
+            tmp_g = post.get_gamma(alpha, beta, t)
             xi = np.add(xi, tmp_x)
             gamma = np.add(gamma, tmp_g)
         new_transition = build_transition(xi, gamma)
-        tmp = get_new_likelihood(ell, mfccs, new_transition, mean_guess, 
-                           covariance_guess, epoch)
+        tmp = get_new_likelihood(ell, mfccs, new_transition, mean_guess,
+                                 covariance_guess, epoch)
         likelihood.append(tmp)
         improvement = likelihood_difference(likelihood)
         if improvement < threshold:
             return new_transition
         transition = new_transition
     return transition
-    
+
 
 # This function trains the mean parameter.
 # Requires -
@@ -166,8 +157,9 @@ def train_transition(alphas, betas, mfccs, mean_guess, covariance_guess,
 # mean_guess:         Initialize mean values for training.
 # covariance_guess:   Fixed covariance values
 # transition_guess:   Fixed transition matrix
-def train_mean(alphas, betas, mfccs, mean_guess, covariance_guess, 
+def train_mean(alphas, betas, mfccs, mean_guess, covariance_guess,
                transition_guess):
+    threshold = 1
     ell = len(alphas)
     states = len(alphas[0][0])
     likelihood = [get_initial_likelihood(alphas)]
@@ -180,13 +172,13 @@ def train_mean(alphas, betas, mfccs, mean_guess, covariance_guess,
         mfcc_t = len(mfcc)
         for q in range(0, states):
             for t in range(0, mfcc_t):
-                gamma = get_gamma(alpha, beta, t)
+                gamma = post.get_gamma(alpha, beta, t)
                 gamma_q = gamma[q]
                 tmp = np.multiply(mfcc[t], gamma_q)
                 weighted_sum[q] = list(np.add(tmp, weighted_sum[q]))
                 gamma_sum[q] += gamma_q
         new_mean = list(np.divide(weighted_sum, gamma_sum))
-        tmp = get_new_likelihood(ell, mfccs, transition_guess, new_mean, 
+        tmp = get_new_likelihood(ell, mfccs, transition_guess, new_mean,
                                  covariance_guess, epoch)
         likelihood.append(tmp)
         improvement = likelihood_difference(likelihood)
@@ -195,7 +187,7 @@ def train_mean(alphas, betas, mfccs, mean_guess, covariance_guess,
     new_mean = list(np.divide(weighted_sum, gamma_sum))
     return new_mean
 
-    
+
 # This function trains the covariance parameter. This happens
 # separately from the function that trains the mean.
 # Requires -
@@ -205,8 +197,9 @@ def train_mean(alphas, betas, mfccs, mean_guess, covariance_guess,
 # mean_guess:         Fixed mean values.
 # covariance_guess:   Initial covariance values for training.
 # transition_guess:   Fixed transition matrix
-def train_covariance(alphas, betas, mfccs, means, covariance_guess, 
+def train_covariance(alphas, betas, mfccs, means, covariance_guess,
                      transition_guess):
+    threshold = 1
     ell = len(alphas)
     states = len(alphas[0][0])
     likelihood = [get_initial_likelihood(alphas)]
@@ -222,13 +215,13 @@ def train_covariance(alphas, betas, mfccs, means, covariance_guess,
             for t in range(0, mfcc_t):
                 var = np.subtract(mfcc[t], mean_q)
                 var = list(np.multiply(var, var))
-                gamma = get_gamma(alpha, beta, t)
+                gamma = post.get_gamma(alpha, beta, t)
                 gamma_q = gamma[q]
                 gamma_sum += gamma_q
                 tmp = list(np.multiply(var, gamma_q))
                 weighted_sum[q] = list(np.add(weighted_sum[q], tmp))
         new_covariance = list(np.divide(weighted_sum, gamma_sum))
-        tmp = get_new_likelihood(ell, mfccs, transition_guess, means, 
+        tmp = get_new_likelihood(ell, mfccs, transition_guess, means,
                                  new_covariance, epoch)
         likelihood.append(tmp)
         improvement = likelihood_difference(likelihood)
