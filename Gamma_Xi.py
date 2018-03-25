@@ -1,4 +1,7 @@
-a# This function calculates a Qx1 vector given alpha, beta and time t.
+import Observation as obs
+
+
+# This function calculates a Qx1 vector given alpha, beta and time t.
 # The input alpha and beta matrices are already in log form.
 # Prior to making the gamma calculations, the log form of both the
 # alpha and beta values have to be undone.  At this point, it
@@ -23,8 +26,8 @@ def get_gamma(alpha, beta, t):
         b_q = math.exp(beta[q])
         gamma[q] = a_q * b_q / sum
     return gamma
-	
-	
+
+
 # This function calculates the xi matrix from alpha, beta, & time t.
 # The input parameters transition, means, and covariances are given
 # to allow calculation of the observation probability.  When using
@@ -46,7 +49,7 @@ def get_xi(alpha, beta, mfcc, t, transition, means, covariances):
     for q in range(0, states):
         beta_q = beta_t[q]
         beta_q = math.exp(beta_q)
-        local_distortion = observation_probability(mfcc_t, means, covariances)
+        local_distortion = obs.prob_observation(mfcc_t, means, covariances)
         r_vect = [0] * states
         for r in range(0, states):
             state_transition = transition[r][q]
