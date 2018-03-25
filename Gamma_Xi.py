@@ -1,5 +1,5 @@
 import Observation as obs
-
+import math
 
 # This function calculates a Qx1 vector given alpha, beta and time t.
 # The input alpha and beta matrices are already in log form.
