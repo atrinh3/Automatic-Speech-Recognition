@@ -1,7 +1,6 @@
 import AlphaBeta
 import Posteriors as post
 import numpy as np
-import scipy.io.wavfile as wv
 
 
 def probability_evidence(alpha):
