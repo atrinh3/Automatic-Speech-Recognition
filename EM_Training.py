@@ -88,8 +88,9 @@ def train_intial_state(alphas, betas, initial_guess, mean_guess,
             final = list(np.divide(current, epoch + 2))
             return final
     new_initial = list(np.divide(new_initial, ell + 1))
-    print("Initial state parameter did not converge after %i iterations."
+    print("Initial state training did not converge after %i iterations."
           % ell)
+    print("Try a lower improvement threshold value than %f." % threshold)
     return new_initial
 
 
@@ -146,6 +147,9 @@ def train_transition(alphas, betas, mfccs, mean_guess, covariance_guess,
         if improvement < threshold:
             return new_transition
         transition = new_transition
+    print("Transition matrix training did not converge after %i iterations."
+          % ell)
+    print("Try a lower improvement threshold value than %f." % threshold)
     return transition
 
 
@@ -189,6 +193,9 @@ def train_gaussian(alphas, betas, mfccs, mean_guess,
             return new_mean, new_covariance
     new_mean = list(np.divide(weighted_sum, gamma_sum))
     new_covariance = list(np.divide(weighted_covariance, gamma_sum))
+    print("Gaussian parameter training did not converge after %i iterations."
+          % ell)
+    print("Try a lower improvement threshold value than %f." % threshold)
     return new_mean, new_covariance
 
 
